@@ -1,258 +1,225 @@
-using System.Data;
 using Incident.Infrastructure;
 using Incident.Models;
+using Npgsql;
 
 namespace Incident.Repositories;
 
 public class LookupRepository : ILookupRepository
 {
-    private readonly IDbHelper _dbHelper;
+    private readonly IDbHelper _db;
 
-    public LookupRepository(IDbHelper dbHelper)
+    public LookupRepository(IDbHelper db)
     {
-        _dbHelper = dbHelper;
+        _db = db;
     }
 
-    public async Task<IEnumerable<IncidentType>> GetIncidentTypesAsync()
+    public async Task<IEnumerable<User>> ListSecretariesAsync(CancellationToken ct = default)
     {
-        var results = new List<IncidentType>();
-        using var connection = _dbHelper.CreateConnection();
-        connection.Open();
+        const string sql = @"
+            SELECT u.id, u.username, u.role_id, r.name as role_name
+            FROM incident.users u
+            JOIN incident.roles r ON u.role_id = r.id
+            WHERE r.name = 'secretary'
+            ORDER BY u.username";
 
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            SELECT id, name, description
+        var users = new List<User>();
+        await using var reader = await _db.ExecuteReaderAsync(sql, ct: ct);
+        
+        while (await reader.ReadAsync(ct))
+        {
+            users.Add(new User
+            {
+                Id = reader.GetGuid(0),
+                Username = reader.GetString(1),
+                RoleId = reader.GetGuid(2),
+                Role = new Role
+                {
+                    Id = reader.GetGuid(2),
+                    Name = reader.GetString(3)
+                }
+            });
+        }
+
+        return users;
+    }
+
+    public async Task<IEnumerable<IncidentType>> ListIncidentTypesAsync(CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT id, name, name_en, name_ar
             FROM incident.incident_types
-            ORDER BY name";
+            ORDER BY name_en";
 
-        using var reader = await ExecuteReaderAsync(command);
-        while (await ReadAsync(reader))
+        var types = new List<IncidentType>();
+        await using var reader = await _db.ExecuteReaderAsync(sql, ct: ct);
+        
+        while (await reader.ReadAsync(ct))
         {
-            results.Add(new IncidentType
+            types.Add(new IncidentType
             {
-                Id = reader.GetGuid(reader.GetOrdinal("id")),
-                Name = reader.GetString(reader.GetOrdinal("name")),
-                Description = reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description"))
+                Id = reader.GetGuid(0),
+                Name = reader.GetString(1),
+                NameEn = reader.GetString(2),
+                NameAr = reader.GetString(3)
             });
         }
 
-        return results;
+        return types;
     }
 
-    public async Task<IEnumerable<IncidentStatus>> GetIncidentStatusesAsync()
+    public async Task<IEnumerable<IncidentStatus>> ListIncidentStatusesAsync(CancellationToken ct = default)
     {
-        var results = new List<IncidentStatus>();
-        using var connection = _dbHelper.CreateConnection();
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            SELECT id, code, name, description, is_terminal
+        const string sql = @"
+            SELECT id, code, name, name_ar
             FROM incident.incident_statuses
-            ORDER BY name";
+            ORDER BY code";
 
-        using var reader = await ExecuteReaderAsync(command);
-        while (await ReadAsync(reader))
+        var statuses = new List<IncidentStatus>();
+        await using var reader = await _db.ExecuteReaderAsync(sql, ct: ct);
+        
+        while (await reader.ReadAsync(ct))
         {
-            results.Add(new IncidentStatus
+            statuses.Add(new IncidentStatus
             {
-                Id = reader.GetGuid(reader.GetOrdinal("id")),
-                Code = reader.GetString(reader.GetOrdinal("code")),
-                Name = reader.GetString(reader.GetOrdinal("name")),
-                Description = reader.IsDBNull(reader.GetOrdinal("description")) ? null : reader.GetString(reader.GetOrdinal("description")),
-                IsTerminal = reader.GetBoolean(reader.GetOrdinal("is_terminal"))
+                Id = reader.GetGuid(0),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                NameAr = reader.GetString(3)
             });
         }
 
-        return results;
+        return statuses;
     }
 
-    public async Task<IEnumerable<Governorate>> GetGovernoratesAsync()
+    public async Task<IEnumerable<Governorate>> ListGovernoratesAsync(CancellationToken ct = default)
     {
-        var results = new List<Governorate>();
-        using var connection = _dbHelper.CreateConnection();
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            SELECT id, name, name_ar
+        const string sql = @"
+            SELECT id, name, name_ar, created_at
             FROM incident.governorates
             ORDER BY name";
 
-        using var reader = await ExecuteReaderAsync(command);
-        while (await ReadAsync(reader))
+        var governorates = new List<Governorate>();
+        await using var reader = await _db.ExecuteReaderAsync(sql, ct: ct);
+        
+        while (await reader.ReadAsync(ct))
         {
-            results.Add(new Governorate
+            governorates.Add(new Governorate
             {
-                Id = reader.GetGuid(reader.GetOrdinal("id")),
-                Name = reader.GetString(reader.GetOrdinal("name")),
-                NameAr = reader.IsDBNull(reader.GetOrdinal("name_ar")) ? null : reader.GetString(reader.GetOrdinal("name_ar"))
+                Id = reader.GetGuid(0),
+                Name = reader.GetString(1),
+                NameAr = reader.GetString(2),
+                CreatedAt = reader.GetDateTime(3)
             });
         }
 
-        return results;
+        return governorates;
     }
 
-    public async Task<IEnumerable<District>> GetDistrictsAsync()
+    public async Task<IEnumerable<District>> ListDistrictsAsync(Guid governorateId, CancellationToken ct = default)
     {
-        var results = new List<District>();
-        using var connection = _dbHelper.CreateConnection();
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            SELECT id, name, name_ar, governorate_id
+        const string sql = @"
+            SELECT id, governorate_id, name, name_ar, created_at
             FROM incident.districts
+            WHERE governorate_id = @governorateId
             ORDER BY name";
 
-        using var reader = await ExecuteReaderAsync(command);
-        while (await ReadAsync(reader))
+        var districts = new List<District>();
+        await using var reader = await _db.ExecuteReaderAsync(sql, 
+            ct: ct,
+            parameters: new NpgsqlParameter("@governorateId", governorateId));
+        
+        while (await reader.ReadAsync(ct))
         {
-            results.Add(new District
+            districts.Add(new District
             {
-                Id = reader.GetGuid(reader.GetOrdinal("id")),
-                Name = reader.GetString(reader.GetOrdinal("name")),
-                NameAr = reader.IsDBNull(reader.GetOrdinal("name_ar")) ? null : reader.GetString(reader.GetOrdinal("name_ar")),
-                GovernorateId = reader.GetGuid(reader.GetOrdinal("governorate_id"))
+                Id = reader.GetGuid(0),
+                GovernorateId = reader.GetGuid(1),
+                Name = reader.GetString(2),
+                NameAr = reader.GetString(3),
+                CreatedAt = reader.GetDateTime(4)
             });
         }
 
-        return results;
+        return districts;
     }
 
-    public async Task<IEnumerable<District>> GetDistrictsByGovernorateAsync(Guid governorateId)
+    public async Task<IEnumerable<Town>> ListTownsAsync(Guid districtId, CancellationToken ct = default)
     {
-        var results = new List<District>();
-        using var connection = _dbHelper.CreateConnection();
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            SELECT id, name, name_ar, governorate_id
-            FROM incident.districts
-            WHERE governorate_id = @GovernorateId
-            ORDER BY name";
-
-        var param = command.CreateParameter();
-        param.ParameterName = "@GovernorateId";
-        param.Value = governorateId;
-        command.Parameters.Add(param);
-
-        using var reader = await ExecuteReaderAsync(command);
-        while (await ReadAsync(reader))
-        {
-            results.Add(new District
-            {
-                Id = reader.GetGuid(reader.GetOrdinal("id")),
-                Name = reader.GetString(reader.GetOrdinal("name")),
-                NameAr = reader.IsDBNull(reader.GetOrdinal("name_ar")) ? null : reader.GetString(reader.GetOrdinal("name_ar")),
-                GovernorateId = reader.GetGuid(reader.GetOrdinal("governorate_id"))
-            });
-        }
-
-        return results;
-    }
-
-    public async Task<IEnumerable<Town>> GetTownsAsync()
-    {
-        var results = new List<Town>();
-        using var connection = _dbHelper.CreateConnection();
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            SELECT id, name, name_ar, district_id
+        const string sql = @"
+            SELECT id, district_id, name, name_ar, lat, lng, created_at
             FROM incident.towns
+            WHERE district_id = @districtId
             ORDER BY name";
 
-        using var reader = await ExecuteReaderAsync(command);
-        while (await ReadAsync(reader))
+        var towns = new List<Town>();
+        await using var reader = await _db.ExecuteReaderAsync(sql, 
+            ct: ct,
+            parameters: new NpgsqlParameter("@districtId", districtId));
+        
+        while (await reader.ReadAsync(ct))
         {
-            results.Add(new Town
+            towns.Add(new Town
             {
-                Id = reader.GetGuid(reader.GetOrdinal("id")),
-                Name = reader.GetString(reader.GetOrdinal("name")),
-                NameAr = reader.IsDBNull(reader.GetOrdinal("name_ar")) ? null : reader.GetString(reader.GetOrdinal("name_ar")),
-                DistrictId = reader.GetGuid(reader.GetOrdinal("district_id"))
+                Id = reader.GetGuid(0),
+                DistrictId = reader.GetGuid(1),
+                Name = reader.GetString(2),
+                NameAr = reader.GetString(3),
+                Lat = reader.IsDBNull(4) ? null : reader.GetDouble(4),
+                Lng = reader.IsDBNull(5) ? null : reader.GetDouble(5),
+                CreatedAt = reader.GetDateTime(6)
             });
         }
 
-        return results;
+        return towns;
     }
 
-    public async Task<IEnumerable<Town>> GetTownsByDistrictAsync(Guid districtId)
+    public async Task<IncidentStatus?> GetStatusByCodeAsync(string code, CancellationToken ct = default)
     {
-        var results = new List<Town>();
-        using var connection = _dbHelper.CreateConnection();
-        connection.Open();
+        const string sql = @"
+            SELECT id, code, name, name_ar
+            FROM incident.incident_statuses
+            WHERE code = @code";
 
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            SELECT id, name, name_ar, district_id
-            FROM incident.towns
-            WHERE district_id = @DistrictId
-            ORDER BY name";
-
-        var param = command.CreateParameter();
-        param.ParameterName = "@DistrictId";
-        param.Value = districtId;
-        command.Parameters.Add(param);
-
-        using var reader = await ExecuteReaderAsync(command);
-        while (await ReadAsync(reader))
+        await using var reader = await _db.ExecuteReaderAsync(sql, 
+            ct: ct,
+            parameters: new NpgsqlParameter("@code", code));
+        
+        if (await reader.ReadAsync(ct))
         {
-            results.Add(new Town
+            return new IncidentStatus
             {
-                Id = reader.GetGuid(reader.GetOrdinal("id")),
-                Name = reader.GetString(reader.GetOrdinal("name")),
-                NameAr = reader.IsDBNull(reader.GetOrdinal("name_ar")) ? null : reader.GetString(reader.GetOrdinal("name_ar")),
-                DistrictId = reader.GetGuid(reader.GetOrdinal("district_id"))
-            });
+                Id = reader.GetGuid(0),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                NameAr = reader.GetString(3)
+            };
         }
 
-        return results;
+        return null;
     }
 
-    public async Task<IEnumerable<Role>> GetRolesAsync()
+    public async Task<IncidentStatus?> GetStatusByIdAsync(Guid id, CancellationToken ct = default)
     {
-        var results = new List<Role>();
-        using var connection = _dbHelper.CreateConnection();
-        connection.Open();
+        const string sql = @"
+            SELECT id, code, name, name_ar
+            FROM incident.incident_statuses
+            WHERE id = @id";
 
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-            SELECT id, name
-            FROM incident.roles
-            ORDER BY name";
-
-        using var reader = await ExecuteReaderAsync(command);
-        while (await ReadAsync(reader))
+        await using var reader = await _db.ExecuteReaderAsync(sql, 
+            ct: ct,
+            parameters: new NpgsqlParameter("@id", id));
+        
+        if (await reader.ReadAsync(ct))
         {
-            results.Add(new Role
+            return new IncidentStatus
             {
-                Id = reader.GetGuid(reader.GetOrdinal("id")),
-                Name = reader.GetString(reader.GetOrdinal("name"))
-            });
+                Id = reader.GetGuid(0),
+                Code = reader.GetString(1),
+                Name = reader.GetString(2),
+                NameAr = reader.GetString(3)
+            };
         }
 
-        return results;
-    }
-
-    private static async Task<IDataReader> ExecuteReaderAsync(IDbCommand command)
-    {
-        if (command is System.Data.Common.DbCommand dbCommand)
-        {
-            return await dbCommand.ExecuteReaderAsync();
-        }
-        return command.ExecuteReader();
-    }
-
-    private static async Task<bool> ReadAsync(IDataReader reader)
-    {
-        if (reader is System.Data.Common.DbDataReader dbReader)
-        {
-            return await dbReader.ReadAsync();
-        }
-        return reader.Read();
+        return null;
     }
 }

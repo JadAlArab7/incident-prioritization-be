@@ -16,22 +16,20 @@ public static class PasswordHasher
             salt,
             Iterations,
             HashAlgorithmName.SHA256,
-            HashSize
-        );
+            HashSize);
 
         return (hash, salt);
     }
 
     public static bool VerifyPassword(string password, byte[] hash, byte[] salt)
     {
-        var hashToCompare = Rfc2898DeriveBytes.Pbkdf2(
+        var computedHash = Rfc2898DeriveBytes.Pbkdf2(
             password,
             salt,
             Iterations,
             HashAlgorithmName.SHA256,
-            HashSize
-        );
+            HashSize);
 
-        return CryptographicOperations.FixedTimeEquals(hash, hashToCompare);
+        return CryptographicOperations.FixedTimeEquals(computedHash, hash);
     }
 }

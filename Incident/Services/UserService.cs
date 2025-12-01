@@ -16,64 +16,44 @@ public class UserService : IUserService
         _roleRepository = roleRepository;
     }
 
-    public async Task<IEnumerable<User>> GetAllUsersAsync()
+    public async Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        return await _userRepository.GetAllAsync();
+        return await _userRepository.GetByIdAsync(id, ct);
     }
 
-    public async Task<User?> GetUserByIdAsync(Guid id)
+    public async Task<IEnumerable<User>> GetAllAsync(CancellationToken ct = default)
     {
-        return await _userRepository.GetByIdAsync(id);
+        return await _userRepository.GetAllAsync(ct);
     }
 
-    public async Task<User?> GetUserByUsernameAsync(string username)
+    public async Task<Guid> CreateAsync(CreateUserDto request, CancellationToken ct = default)
     {
-        return await _userRepository.GetByUsernameAsync(username);
-    }
+        // Check if username already exists
+        var existingUser = await _userRepository.GetByUsernameAsync(request.Username, ct);
+        if (existingUser != null)
+            throw new ArgumentException("Username already exists");
 
-    public async Task<IEnumerable<User>> GetUsersByRoleAsync(string roleName)
-    {
-        return await _userRepository.GetByRoleAsync(roleName);
-    }
+        // Get role
+        var role = await _roleRepository.GetByNameAsync(request.Role, ct);
+        if (role == null)
+            throw new ArgumentException($"Role '{request.Role}' not found");
 
-    public async Task<User?> CreateUserAsync(CreateUserDto createUserDto)
-    {
-        var (hash, salt) = PasswordHasher.HashPassword(createUserDto.Password);
+        // Hash password
+        var (hash, salt) = PasswordHasher.HashPassword(request.Password);
 
         var user = new User
         {
-            Id = Guid.NewGuid(),
-            Username = createUserDto.Username,
+            Username = request.Username,
             PasswordHash = hash,
             PasswordSalt = salt,
-            RoleId = createUserDto.RoleId,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            RoleId = role.Id
         };
 
-        var createdUser = await _userRepository.CreateAsync(user);
-        if (createdUser != null)
-        {
-            // Fetch the user with role information
-            return await _userRepository.GetByIdAsync(createdUser.Id);
-        }
-
-        return null;
+        return await _userRepository.CreateAsync(user, ct);
     }
 
-    public async Task<bool> DeleteUserAsync(Guid id)
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        return await _userRepository.DeleteAsync(id);
-    }
-
-    public async Task<bool> ValidateUserCredentialsAsync(string username, string password)
-    {
-        var user = await _userRepository.GetByUsernameAsync(username);
-        if (user == null)
-        {
-            return false;
-        }
-
-        return PasswordHasher.VerifyPassword(password, user.PasswordHash, user.PasswordSalt);
+        return await _userRepository.DeleteAsync(id, ct);
     }
 }

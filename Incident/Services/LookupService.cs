@@ -1,4 +1,4 @@
-using Incident.Models;
+using Incident.DTOs;
 using Incident.Repositories;
 
 namespace Incident.Services;
@@ -12,43 +12,73 @@ public class LookupService : ILookupService
         _lookupRepository = lookupRepository;
     }
 
-    public async Task<IEnumerable<IncidentType>> GetIncidentTypesAsync()
+    public async Task<IEnumerable<UserSummaryDto>> ListSecretariesAsync(CancellationToken ct = default)
     {
-        return await _lookupRepository.GetIncidentTypesAsync();
+        var users = await _lookupRepository.ListSecretariesAsync(ct);
+        return users.Select(u => new UserSummaryDto
+        {
+            Id = u.Id,
+            Username = u.Username,
+            RoleName = u.Role?.Name
+        });
     }
 
-    public async Task<IEnumerable<IncidentStatus>> GetIncidentStatusesAsync()
+    public async Task<IEnumerable<IncidentTypeDto>> ListIncidentTypesAsync(CancellationToken ct = default)
     {
-        return await _lookupRepository.GetIncidentStatusesAsync();
+        var types = await _lookupRepository.ListIncidentTypesAsync(ct);
+        return types.Select(t => new IncidentTypeDto
+        {
+            Id = t.Id,
+            Name = t.Name,
+            NameEn = t.NameEn,
+            NameAr = t.NameAr
+        });
     }
 
-    public async Task<IEnumerable<Governorate>> GetGovernoratesAsync()
+    public async Task<IEnumerable<IncidentStatusDto>> ListIncidentStatusesAsync(CancellationToken ct = default)
     {
-        return await _lookupRepository.GetGovernoratesAsync();
+        var statuses = await _lookupRepository.ListIncidentStatusesAsync(ct);
+        return statuses.Select(s => new IncidentStatusDto
+        {
+            Id = s.Id,
+            Code = s.Code,
+            Name = s.Name,
+            NameAr = s.NameAr
+        });
     }
 
-    public async Task<IEnumerable<District>> GetDistrictsAsync()
+    public async Task<IEnumerable<GeoLookupDto>> ListGovernoratesAsync(CancellationToken ct = default)
     {
-        return await _lookupRepository.GetDistrictsAsync();
+        var governorates = await _lookupRepository.ListGovernoratesAsync(ct);
+        return governorates.Select(g => new GeoLookupDto
+        {
+            Id = g.Id,
+            Name = g.Name,
+            NameAr = g.NameAr
+        });
     }
 
-    public async Task<IEnumerable<District>> GetDistrictsByGovernorateAsync(Guid governorateId)
+    public async Task<IEnumerable<GeoLookupDto>> ListDistrictsAsync(Guid governorateId, CancellationToken ct = default)
     {
-        return await _lookupRepository.GetDistrictsByGovernorateAsync(governorateId);
+        var districts = await _lookupRepository.ListDistrictsAsync(governorateId, ct);
+        return districts.Select(d => new GeoLookupDto
+        {
+            Id = d.Id,
+            Name = d.Name,
+            NameAr = d.NameAr
+        });
     }
 
-    public async Task<IEnumerable<Town>> GetTownsAsync()
+    public async Task<IEnumerable<TownDto>> ListTownsAsync(Guid districtId, CancellationToken ct = default)
     {
-        return await _lookupRepository.GetTownsAsync();
-    }
-
-    public async Task<IEnumerable<Town>> GetTownsByDistrictAsync(Guid districtId)
-    {
-        return await _lookupRepository.GetTownsByDistrictAsync(districtId);
-    }
-
-    public async Task<IEnumerable<Role>> GetRolesAsync()
-    {
-        return await _lookupRepository.GetRolesAsync();
+        var towns = await _lookupRepository.ListTownsAsync(districtId, ct);
+        return towns.Select(t => new TownDto
+        {
+            Id = t.Id,
+            Name = t.Name,
+            NameAr = t.NameAr,
+            Lat = t.Lat,
+            Lng = t.Lng
+        });
     }
 }

@@ -4,10 +4,16 @@ namespace Incident.Repositories;
 
 public interface IIncidentRepository
 {
-    Task<IncidentRecord?> GetByIdAsync(Guid id, CancellationToken ct = default);
-    Task<List<IncidentRecord>> GetAllAsync(int page, int pageSize, CancellationToken ct = default);
-    Task<int> GetTotalCountAsync(CancellationToken ct = default);
-    Task<Guid> CreateAsync(IncidentRecord incident, CancellationToken ct = default);
-    Task<bool> UpdateAsync(IncidentRecord incident, CancellationToken ct = default);
+    Task<Guid> CreateAsync(IncidentRecord entity, IEnumerable<Guid> typeIds, CancellationToken ct = default);
+    Task<bool> UpdateAsync(IncidentRecord entity, IEnumerable<Guid> typeIds, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+    Task<IncidentRecord?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<(IEnumerable<IncidentRecord> Items, int TotalCount)> ListForUserAsync(
+        Guid userId, 
+        bool includeAssigned, 
+        int page, 
+        int pageSize, 
+        CancellationToken ct = default);
+    Task<Guid> CreateLocationAsync(Location location, CancellationToken ct = default);
+    Task<bool> UpdateLocationAsync(Location location, CancellationToken ct = default);
 }

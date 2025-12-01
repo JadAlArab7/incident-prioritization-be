@@ -5,11 +5,8 @@ namespace Incident.Services;
 
 public interface IUserService
 {
-    Task<IEnumerable<User>> GetAllUsersAsync();
-    Task<User?> GetUserByIdAsync(Guid id);
-    Task<User?> GetUserByUsernameAsync(string username);
-    Task<IEnumerable<User>> GetUsersByRoleAsync(string roleName);
-    Task<User?> CreateUserAsync(CreateUserDto createUserDto);
-    Task<bool> DeleteUserAsync(Guid id);
-    Task<bool> ValidateUserCredentialsAsync(string username, string password);
+    Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<IEnumerable<User>> GetAllAsync(CancellationToken ct = default);
+    Task<Guid> CreateAsync(CreateUserDto request, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
 }

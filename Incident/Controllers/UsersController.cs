@@ -1,7 +1,7 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using Incident.DTOs;
 using Incident.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Incident.Controllers;
 
@@ -11,131 +11,65 @@ namespace Incident.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
+    private readonly ILookupService _lookupService;
 
-    public UsersController(IUserService userService)
+    public UsersController(IUserService userService, ILookupService lookupService)
     {
         _userService = userService;
+        _lookupService = lookupService;
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<UserDto>>> GetAllUsers()
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetAll(CancellationToken ct)
     {
-        var users = await _userService.GetAllUsersAsync();
-        var userDtos = users.Select(u => new UserDto
+        var users = await _userService.GetAllAsync(ct);
+        var result = users.Select(u => new UserSummaryDto
         {
             Id = u.Id,
             Username = u.Username,
-            Role = u.Role?.Name ?? "user",
-            CreatedAt = u.CreatedAt,
-            UpdatedAt = u.UpdatedAt
+            RoleName = u.Role?.Name
         });
-
-        return Ok(userDtos);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<UserDto>> GetUserById(Guid id)
+    public async Task<ActionResult<UserSummaryDto>> GetById(Guid id, CancellationToken ct)
     {
-        var user = await _userService.GetUserByIdAsync(id);
+        var user = await _userService.GetByIdAsync(id, ct);
         if (user == null)
-        {
-            return NotFound(new { error = "User not found" });
-        }
+            return NotFound();
 
-        var userDto = new UserDto
+        return Ok(new UserSummaryDto
         {
             Id = user.Id,
             Username = user.Username,
-            Role = user.Role?.Name ?? "user",
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
-        };
-
-        return Ok(userDto);
-    }
-
-    [HttpGet("officers")]
-    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetOfficers()
-    {
-        var officers = await _userService.GetUsersByRoleAsync("officer");
-        var userDtos = officers.Select(u => new UserSummaryDto
-        {
-            Id = u.Id,
-            Username = u.Username,
-            Role = u.Role?.Name ?? "officer"
+            RoleName = user.Role?.Name
         });
-
-        return Ok(userDtos);
-    }
-
-    [HttpGet("by-role/{roleName}")]
-    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetUsersByRole(string roleName)
-    {
-        var users = await _userService.GetUsersByRoleAsync(roleName);
-        var userDtos = users.Select(u => new UserSummaryDto
-        {
-            Id = u.Id,
-            Username = u.Username,
-            Role = u.Role?.Name ?? roleName
-        });
-
-        return Ok(userDtos);
     }
 
     [HttpPost]
-    [Authorize(Roles = "supervisor")]
-    public async Task<ActionResult<UserDto>> CreateUser([FromBody] CreateUserDto createUserDto)
+    [Authorize(Roles = "supervisor,officer")]
+    public async Task<ActionResult<Guid>> Create([FromBody] CreateUserDto request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(createUserDto.Username))
-        {
-            return BadRequest(new { error = "Username is required" });
-        }
-
-        if (string.IsNullOrWhiteSpace(createUserDto.Password))
-        {
-            return BadRequest(new { error = "Password is required" });
-        }
-
-        var existingUser = await _userService.GetUserByUsernameAsync(createUserDto.Username);
-        if (existingUser != null)
-        {
-            return Conflict(new { error = "Username already exists" });
-        }
-
-        var user = await _userService.CreateUserAsync(createUserDto);
-        if (user == null)
-        {
-            return BadRequest(new { error = "Failed to create user" });
-        }
-
-        var userDto = new UserDto
-        {
-            Id = user.Id,
-            Username = user.Username,
-            Role = user.Role?.Name ?? "user",
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
-        };
-
-        return CreatedAtAction(nameof(GetUserById), new { id = user.Id }, userDto);
+        var id = await _userService.CreateAsync(request, ct);
+        return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "supervisor")]
-    public async Task<ActionResult> DeleteUser(Guid id)
+    [Authorize(Roles = "supervisor,officer")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var user = await _userService.GetUserByIdAsync(id);
-        if (user == null)
-        {
-            return NotFound(new { error = "User not found" });
-        }
-
-        var result = await _userService.DeleteUserAsync(id);
-        if (!result)
-        {
-            return BadRequest(new { error = "Failed to delete user" });
-        }
+        var deleted = await _userService.DeleteAsync(id, ct);
+        if (!deleted)
+            return NotFound();
 
         return NoContent();
+    }
+
+    [HttpGet("secretaries")]
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetSecretaries(CancellationToken ct)
+    {
+        var secretaries = await _lookupService.ListSecretariesAsync(ct);
+        return Ok(secretaries);
     }
 }
