@@ -1,4 +1,4 @@
-INSERT INTO roles (name) VALUES
+INSERT INTO incident.roles (name) VALUES
   ('secretary'),
   ('officer'),
   ('supervisor')

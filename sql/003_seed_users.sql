@@ -4,6 +4,6 @@
 -- Role: supervisor
 
 -- This is a placeholder - run the application's seed endpoint or use the DbSeeder service
--- INSERT INTO users (username, password_hash, password_salt, role_id)
+-- INSERT INTO incident.users (username, password_hash, password_salt, role_id)
 -- VALUES ('admin', decode('HASH_HERE', 'hex'), decode('SALT_HERE', 'hex'),
---         (SELECT id FROM roles WHERE name = 'supervisor'));
+--         (SELECT id FROM incident.roles WHERE name = 'supervisor'));

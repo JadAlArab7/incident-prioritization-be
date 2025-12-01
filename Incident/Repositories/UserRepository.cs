@@ -18,8 +18,8 @@ public class UserRepository : IUserRepository
     {
         const string sql = @"
             SELECT u.id, u.username, u.password_hash, u.password_salt, u.role_id, r.name as role_name, u.created_at, u.updated_at
-            FROM users u
-            INNER JOIN roles r ON u.role_id = r.id
+            FROM incident.users u
+            INNER JOIN incident.roles r ON u.role_id = r.id
             WHERE u.username = @username";
 
         return await _dbHelper.QuerySingleOrDefaultAsync(
@@ -33,8 +33,8 @@ public class UserRepository : IUserRepository
     {
         const string sql = @"
             SELECT u.id, u.username, u.password_hash, u.password_salt, u.role_id, r.name as role_name, u.created_at, u.updated_at
-            FROM users u
-            INNER JOIN roles r ON u.role_id = r.id
+            FROM incident.users u
+            INNER JOIN incident.roles r ON u.role_id = r.id
             WHERE u.id = @id";
 
         return await _dbHelper.QuerySingleOrDefaultAsync(
@@ -47,7 +47,7 @@ public class UserRepository : IUserRepository
     public async Task<Guid> CreateUserAsync(string username, byte[] passwordHash, byte[] passwordSalt, Guid roleId)
     {
         const string sql = @"
-            INSERT INTO users (username, password_hash, password_salt, role_id)
+            INSERT INTO incident.users (username, password_hash, password_salt, role_id)
             VALUES (@username, @password_hash, @password_salt, @role_id)
             RETURNING id";
 
@@ -64,7 +64,7 @@ public class UserRepository : IUserRepository
 
     public async Task<bool> UserExistsAsync(string username)
     {
-        const string sql = "SELECT EXISTS(SELECT 1 FROM users WHERE username = @username)";
+        const string sql = "SELECT EXISTS(SELECT 1 FROM incident.users WHERE username = @username)";
 
         var result = await _dbHelper.ExecuteScalarAsync<bool>(
             sql,

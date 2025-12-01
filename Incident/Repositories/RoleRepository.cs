@@ -16,7 +16,7 @@ public class RoleRepository : IRoleRepository
 
     public async Task<Role?> GetByNameAsync(string name)
     {
-        const string sql = "SELECT id, name FROM roles WHERE name = @name";
+        const string sql = "SELECT id, name FROM incident.roles WHERE name = @name";
 
         return await _dbHelper.QuerySingleOrDefaultAsync(
             sql,
@@ -27,7 +27,7 @@ public class RoleRepository : IRoleRepository
 
     public async Task<Role?> GetByIdAsync(Guid id)
     {
-        const string sql = "SELECT id, name FROM roles WHERE id = @id";
+        const string sql = "SELECT id, name FROM incident.roles WHERE id = @id";
 
         return await _dbHelper.QuerySingleOrDefaultAsync(
             sql,
@@ -38,7 +38,7 @@ public class RoleRepository : IRoleRepository
 
     public async Task<List<Role>> GetAllAsync()
     {
-        const string sql = "SELECT id, name FROM roles";
+        const string sql = "SELECT id, name FROM incident.roles";
 
         return await _dbHelper.QueryAsync(sql, MapRole);
     }
