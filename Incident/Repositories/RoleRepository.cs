@@ -6,65 +6,42 @@ namespace Incident.Repositories;
 
 public class RoleRepository : IRoleRepository
 {
-    private readonly IDbHelper _db;
+    private readonly IDbHelper _dbHelper;
 
-    public RoleRepository(IDbHelper db)
+    public RoleRepository(IDbHelper dbHelper)
     {
-        _db = db;
+        _dbHelper = dbHelper;
     }
 
     public async Task<Role?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        const string sql = "SELECT id, name FROM incident.roles WHERE id = @id";
+        const string sql = "SELECT id, code, name FROM incident.roles WHERE id = @id";
+        var parameters = new[] { new NpgsqlParameter("@id", id) };
 
-        await using var reader = await _db.ExecuteReaderAsync(sql, ct, new NpgsqlParameter("@id", id));
-
-        if (await reader.ReadAsync(ct))
-        {
-            return new Role
-            {
-                Id = reader.GetGuid(0),
-                Name = reader.GetString(1)
-            };
-        }
-
-        return null;
+        return await _dbHelper.ExecuteReaderSingleAsync(sql, MapRole, ct, parameters);
     }
 
-    public async Task<Role?> GetByNameAsync(string name, CancellationToken ct = default)
+    public async Task<Role?> GetByCodeAsync(string code, CancellationToken ct = default)
     {
-        const string sql = "SELECT id, name FROM incident.roles WHERE name = @name";
+        const string sql = "SELECT id, code, name FROM incident.roles WHERE code = @code";
+        var parameters = new[] { new NpgsqlParameter("@code", code) };
 
-        await using var reader = await _db.ExecuteReaderAsync(sql, ct, new NpgsqlParameter("@name", name));
-
-        if (await reader.ReadAsync(ct))
-        {
-            return new Role
-            {
-                Id = reader.GetGuid(0),
-                Name = reader.GetString(1)
-            };
-        }
-
-        return null;
+        return await _dbHelper.ExecuteReaderSingleAsync(sql, MapRole, ct, parameters);
     }
 
-    public async Task<IEnumerable<Role>> GetAllAsync(CancellationToken ct = default)
+    public async Task<List<Role>> GetAllAsync(CancellationToken ct = default)
     {
-        const string sql = "SELECT id, name FROM incident.roles ORDER BY name";
+        const string sql = "SELECT id, code, name FROM incident.roles ORDER BY name";
+        return await _dbHelper.ExecuteReaderAsync(sql, MapRole, ct);
+    }
 
-        var roles = new List<Role>();
-        await using var reader = await _db.ExecuteReaderAsync(sql, ct);
-
-        while (await reader.ReadAsync(ct))
+    private static Role MapRole(NpgsqlDataReader reader)
+    {
+        return new Role
         {
-            roles.Add(new Role
-            {
-                Id = reader.GetGuid(0),
-                Name = reader.GetString(1)
-            });
-        }
-
-        return roles;
+            Id = reader.GetGuid(0),
+            Code = reader.GetString(1),
+            Name = reader.GetString(2)
+        };
     }
 }

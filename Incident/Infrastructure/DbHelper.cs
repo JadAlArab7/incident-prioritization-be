@@ -20,7 +20,10 @@ public class DbHelper : IDbHelper
         await connection.OpenAsync(ct);
         
         await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.AddRange(parameters);
+        if (parameters != null && parameters.Length > 0)
+        {
+            command.Parameters.AddRange(parameters);
+        }
         
         return await command.ExecuteNonQueryAsync(ct);
     }
@@ -33,7 +36,10 @@ public class DbHelper : IDbHelper
         await connection.OpenAsync(ct);
         
         await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.AddRange(parameters);
+        if (parameters != null && parameters.Length > 0)
+        {
+            command.Parameters.AddRange(parameters);
+        }
         
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
@@ -50,7 +56,10 @@ public class DbHelper : IDbHelper
         await connection.OpenAsync(ct);
         
         await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.AddRange(parameters);
+        if (parameters != null && parameters.Length > 0)
+        {
+            command.Parameters.AddRange(parameters);
+        }
         
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (await reader.ReadAsync(ct))
@@ -67,7 +76,10 @@ public class DbHelper : IDbHelper
         await connection.OpenAsync(ct);
         
         await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.AddRange(parameters);
+        if (parameters != null && parameters.Length > 0)
+        {
+            command.Parameters.AddRange(parameters);
+        }
         
         var result = await command.ExecuteScalarAsync(ct);
         

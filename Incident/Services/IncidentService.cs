@@ -7,240 +7,118 @@ namespace Incident.Services;
 public class IncidentService : IIncidentService
 {
     private readonly IIncidentRepository _incidentRepository;
-    private readonly ILookupRepository _lookupRepository;
-    private readonly IUserRepository _userRepository;
+    private readonly IIncidentStatusRepository _statusRepository;
 
     public IncidentService(
         IIncidentRepository incidentRepository,
-        ILookupRepository lookupRepository,
-        IUserRepository userRepository)
+        IIncidentStatusRepository statusRepository)
     {
         _incidentRepository = incidentRepository;
-        _lookupRepository = lookupRepository;
-        _userRepository = userRepository;
-    }
-
-    public async Task<IncidentResponseDto> CreateAsync(IncidentCreateRequestDto request, Guid currentUserId, CancellationToken ct = default)
-    {
-        // Validate sent_to_user exists if provided
-        if (request.SentToUserId.HasValue)
-        {
-            var sentToUser = await _userRepository.GetByIdAsync(request.SentToUserId.Value, ct);
-            if (sentToUser == null)
-                throw new ArgumentException("Sent to user not found");
-        }
-
-        // Create location if provided
-        Guid? locationId = null;
-        if (request.Location != null)
-        {
-            var location = new Location
-            {
-                Lat = request.Location.Lat,
-                Lng = request.Location.Lng,
-                GovernorateId = request.Location.GovernorateId,
-                DistrictId = request.Location.DistrictId,
-                TownId = request.Location.TownId,
-                AddressText = request.Location.AddressText
-            };
-            locationId = await _incidentRepository.CreateLocationAsync(location, ct);
-        }
-
-        // Default status is 'draft'
-        var incident = new IncidentRecord
-        {
-            Title = request.Title,
-            Description = request.Description,
-            SentToUserId = request.SentToUserId,
-            CreatedByUserId = currentUserId,
-            LocationId = locationId,
-            Priority = request.Priority,
-            SuggestedActionsTaken = request.SuggestedActionsTaken,
-            StatusId = IncidentStatus.DraftId
-        };
-
-        var id = await _incidentRepository.CreateAsync(incident, request.TypeIds, ct);
-        
-        return (await GetByIdAsync(id, ct))!;
-    }
-
-    public async Task<IncidentResponseDto> UpdateAsync(Guid id, IncidentUpdateRequestDto request, Guid currentUserId, CancellationToken ct = default)
-    {
-        var existing = await _incidentRepository.GetByIdAsync(id, ct);
-        if (existing == null)
-            throw new KeyNotFoundException("Incident not found");
-
-        // Validate sent_to_user exists if provided
-        if (request.SentToUserId.HasValue)
-        {
-            var sentToUser = await _userRepository.GetByIdAsync(request.SentToUserId.Value, ct);
-            if (sentToUser == null)
-                throw new ArgumentException("Sent to user not found");
-        }
-
-        // Handle location update
-        Guid? locationId = existing.LocationId;
-        if (request.Location != null)
-        {
-            if (existing.LocationId.HasValue)
-            {
-                // Update existing location
-                var location = new Location
-                {
-                    Id = existing.LocationId.Value,
-                    Lat = request.Location.Lat,
-                    Lng = request.Location.Lng,
-                    GovernorateId = request.Location.GovernorateId,
-                    DistrictId = request.Location.DistrictId,
-                    TownId = request.Location.TownId,
-                    AddressText = request.Location.AddressText
-                };
-                await _incidentRepository.UpdateLocationAsync(location, ct);
-            }
-            else
-            {
-                // Create new location
-                var location = new Location
-                {
-                    Lat = request.Location.Lat,
-                    Lng = request.Location.Lng,
-                    GovernorateId = request.Location.GovernorateId,
-                    DistrictId = request.Location.DistrictId,
-                    TownId = request.Location.TownId,
-                    AddressText = request.Location.AddressText
-                };
-                locationId = await _incidentRepository.CreateLocationAsync(location, ct);
-            }
-        }
-
-        // Determine status - keep current if not provided, otherwise validate
-        var statusId = existing.StatusId;
-        if (request.StatusId.HasValue)
-        {
-            var status = await _lookupRepository.GetStatusByIdAsync(request.StatusId.Value, ct);
-            if (status == null)
-                throw new ArgumentException("Invalid status");
-            statusId = request.StatusId.Value;
-        }
-
-        var incident = new IncidentRecord
-        {
-            Id = id,
-            Title = request.Title,
-            Description = request.Description,
-            SentToUserId = request.SentToUserId,
-            CreatedByUserId = existing.CreatedByUserId,
-            LocationId = locationId,
-            Priority = request.Priority,
-            SuggestedActionsTaken = request.SuggestedActionsTaken,
-            StatusId = statusId
-        };
-
-        await _incidentRepository.UpdateAsync(incident, request.TypeIds, ct);
-        
-        return (await GetByIdAsync(id, ct))!;
-    }
-
-    public async Task<bool> DeleteAsync(Guid id, Guid currentUserId, string userRole, CancellationToken ct = default)
-    {
-        var existing = await _incidentRepository.GetByIdAsync(id, ct);
-        if (existing == null)
-            return false;
-
-        // Only admin/officer can delete, or the creator
-        var canDelete = userRole == "officer" || userRole == "supervisor" || existing.CreatedByUserId == currentUserId;
-        if (!canDelete)
-            throw new UnauthorizedAccessException("You don't have permission to delete this incident");
-
-        return await _incidentRepository.DeleteAsync(id, ct);
+        _statusRepository = statusRepository;
     }
 
     public async Task<IncidentResponseDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         var incident = await _incidentRepository.GetByIdAsync(id, ct);
         if (incident == null)
+        {
             return null;
+        }
 
-        return MapToResponse(incident);
+        return MapToResponseDto(incident);
     }
 
-    public async Task<PagedResponseDto<IncidentResponseDto>> ListForUserAsync(
-        Guid userId, bool includeAssigned, PagedRequestDto request, CancellationToken ct = default)
+    public async Task<PagedResponseDto<IncidentResponseDto>> GetAllAsync(PagedRequestDto request, CancellationToken ct = default)
     {
-        var (items, totalCount) = await _incidentRepository.ListForUserAsync(
-            userId, includeAssigned, request.Page, request.PageSize, ct);
+        var incidents = await _incidentRepository.GetAllAsync(request.Page, request.PageSize, ct);
+        var totalCount = await _incidentRepository.GetTotalCountAsync(ct);
 
         return new PagedResponseDto<IncidentResponseDto>
         {
-            Items = items.Select(MapToResponse).ToList(),
+            Items = incidents.Select(MapToResponseDto).ToList(),
+            TotalCount = totalCount,
             Page = request.Page,
-            PageSize = request.PageSize,
-            TotalCount = totalCount
+            PageSize = request.PageSize
         };
     }
 
-    private static IncidentResponseDto MapToResponse(IncidentRecord incident)
+    public async Task<IncidentResponseDto> CreateAsync(IncidentCreateRequestDto request, Guid createdByUserId, CancellationToken ct = default)
+    {
+        // Get default status (draft)
+        var draftStatusId = await _statusRepository.GetStatusIdByCodeAsync("draft", ct);
+        if (draftStatusId == null)
+        {
+            throw new InvalidOperationException("Draft status not found in database");
+        }
+
+        var incident = new IncidentRecord
+        {
+            Title = request.Title,
+            Description = request.Description,
+            IncidentTypeId = request.IncidentTypeId,
+            StatusId = draftStatusId.Value,
+            LocationId = request.LocationId,
+            CreatedByUserId = createdByUserId
+        };
+
+        var id = await _incidentRepository.CreateAsync(incident, ct);
+        var created = await _incidentRepository.GetByIdAsync(id, ct);
+
+        return MapToResponseDto(created!);
+    }
+
+    public async Task<IncidentResponseDto?> UpdateAsync(Guid id, IncidentUpdateRequestDto request, CancellationToken ct = default)
+    {
+        var incident = await _incidentRepository.GetByIdAsync(id, ct);
+        if (incident == null)
+        {
+            return null;
+        }
+
+        incident.Title = request.Title ?? incident.Title;
+        incident.Description = request.Description ?? incident.Description;
+        incident.IncidentTypeId = request.IncidentTypeId ?? incident.IncidentTypeId;
+        incident.LocationId = request.LocationId ?? incident.LocationId;
+
+        await _incidentRepository.UpdateAsync(incident, ct);
+        var updated = await _incidentRepository.GetByIdAsync(id, ct);
+
+        return MapToResponseDto(updated!);
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        return await _incidentRepository.DeleteAsync(id, ct);
+    }
+
+    private static IncidentResponseDto MapToResponseDto(IncidentRecord incident)
     {
         return new IncidentResponseDto
         {
             Id = incident.Id,
             Title = incident.Title,
             Description = incident.Description,
-            Priority = incident.Priority,
-            SuggestedActionsTaken = incident.SuggestedActionsTaken,
-            CreatedAt = incident.CreatedAt,
-            UpdatedAt = incident.UpdatedAt,
-            Status = new IncidentStatusDto
-            {
-                Id = incident.Status!.Id,
-                Code = incident.Status.Code,
-                Name = incident.Status.Name,
-                NameAr = incident.Status.NameAr
-            },
-            CreatedByUser = new UserSummaryDto
-            {
-                Id = incident.CreatedByUser!.Id,
-                Username = incident.CreatedByUser.Username,
-                RoleName = incident.CreatedByUser.Role?.Name
-            },
-            SentToUser = incident.SentToUser != null ? new UserSummaryDto
-            {
-                Id = incident.SentToUser.Id,
-                Username = incident.SentToUser.Username,
-                RoleName = incident.SentToUser.Role?.Name
-            } : null,
-            Location = incident.Location != null ? new LocationResponseDto
+            IncidentTypeId = incident.IncidentTypeId,
+            IncidentTypeName = incident.IncidentTypeName,
+            StatusId = incident.StatusId,
+            StatusName = incident.StatusName,
+            LocationId = incident.LocationId,
+            Location = incident.Location != null ? new LocationDto
             {
                 Id = incident.Location.Id,
-                Lat = incident.Location.Lat,
-                Lng = incident.Location.Lng,
-                AddressText = incident.Location.AddressText,
-                Governorate = incident.Location.Governorate != null ? new GeoLookupDto
-                {
-                    Id = incident.Location.Governorate.Id,
-                    Name = incident.Location.Governorate.Name,
-                    NameAr = incident.Location.Governorate.NameAr
-                } : null,
-                District = incident.Location.District != null ? new GeoLookupDto
-                {
-                    Id = incident.Location.District.Id,
-                    Name = incident.Location.District.Name,
-                    NameAr = incident.Location.District.NameAr
-                } : null,
-                Town = incident.Location.Town != null ? new GeoLookupDto
-                {
-                    Id = incident.Location.Town.Id,
-                    Name = incident.Location.Town.Name,
-                    NameAr = incident.Location.Town.NameAr
-                } : null
+                GovernorateId = incident.Location.GovernorateId,
+                GovernorateName = incident.Location.GovernorateName,
+                DistrictId = incident.Location.DistrictId,
+                DistrictName = incident.Location.DistrictName,
+                TownId = incident.Location.TownId,
+                TownName = incident.Location.TownName
             } : null,
-            Types = incident.Types.Select(t => new IncidentTypeDto
-            {
-                Id = t.Id,
-                Name = t.Name,
-                NameEn = t.NameEn,
-                NameAr = t.NameAr
-            }).ToList()
+            CreatedByUserId = incident.CreatedByUserId,
+            CreatedByUserName = incident.CreatedByUserName,
+            SentToUserId = incident.SentToUserId,
+            SentToUserName = incident.SentToUserName,
+            CreatedAt = incident.CreatedAt,
+            UpdatedAt = incident.UpdatedAt
         };
     }
 }
