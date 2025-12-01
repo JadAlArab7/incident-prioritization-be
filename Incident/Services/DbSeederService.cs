@@ -6,37 +6,55 @@ namespace Incident.Services;
 
 public class DbSeederService
 {
-    private readonly IRoleRepository _roleRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IRoleRepository _roleRepository;
 
-    public DbSeederService(IRoleRepository roleRepository, IUserRepository userRepository)
+    public DbSeederService(IUserRepository userRepository, IRoleRepository roleRepository)
     {
-        _roleRepository = roleRepository;
         _userRepository = userRepository;
+        _roleRepository = roleRepository;
     }
 
-    public async Task SeedAsync(CancellationToken ct = default)
+    public async Task SeedAsync()
     {
-        // Check if admin user exists
-        var adminUser = await _userRepository.GetByUsernameAsync("admin", ct);
-        if (adminUser != null)
-            return; // Already seeded
+        // Seed Admin/Supervisor user
+        await SeedUserAsync("admin", "supervisor");
+        
+        // Seed Secretary user
+        await SeedUserAsync("secretary", "secretary");
+        
+        // Seed Officer user
+        await SeedUserAsync("officer", "officer");
+        
+        // Seed Supervisor user (separate from admin)
+        await SeedUserAsync("supervisor", "supervisor");
+    }
 
-        // Get supervisor role
-        var supervisorRole = await _roleRepository.GetByNameAsync("supervisor", ct);
-        if (supervisorRole == null)
-            throw new InvalidOperationException("Supervisor role not found. Please run the SQL seed scripts first.");
-
-        // Create admin user
-        var (hash, salt) = PasswordHasher.HashPassword("admin123");
-        var admin = new User
+    private async Task SeedUserAsync(string username, string roleName)
+    {
+        var existingUser = await _userRepository.GetByUsernameAsync(username);
+        if (existingUser != null)
         {
-            Username = "admin",
+            return; // User already exists
+        }
+
+        var role = await _roleRepository.GetByNameAsync(roleName);
+        if (role == null)
+        {
+            Console.WriteLine($"Warning: Role '{roleName}' not found. Skipping user '{username}' creation.");
+            return;
+        }
+
+        var (hash, salt) = PasswordHasher.HashPassword("admin123");
+        var user = new User
+        {
+            Username = username,
             PasswordHash = hash,
             PasswordSalt = salt,
-            RoleId = supervisorRole.Id
+            RoleId = role.Id
         };
 
-        await _userRepository.CreateAsync(admin, ct);
+        await _userRepository.CreateAsync(user);
+        Console.WriteLine($"User '{username}' created with role '{roleName}'.");
     }
 }
