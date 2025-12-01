@@ -1,8 +1,6 @@
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Actions are data-driven and tied to from→to status transitions
 CREATE TABLE IF NOT EXISTS incident_status_transitions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   from_status_id UUID NOT NULL REFERENCES incident_statuses(id) ON DELETE CASCADE,
   to_status_id   UUID NOT NULL REFERENCES incident_statuses(id) ON DELETE RESTRICT,
   action_code    TEXT NOT NULL,     -- e.g., 'send_to_review', 'accept', 'reject'
