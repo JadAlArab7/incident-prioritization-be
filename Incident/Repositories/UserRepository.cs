@@ -18,23 +18,26 @@ public class UserRepository : IUserRepository
             SELECT u.id, u.username, u.email, u.password_hash as PasswordHash, 
                    u.full_name as FullName, u.role_id as RoleId, u.is_active as IsActive,
                    u.created_at as CreatedAt, u.updated_at as UpdatedAt,
-                   r.id, r.name, r.code, r.description
+                   r.id as RoleId, r.code as Code, r.name as Name, r.description as Description
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.id
             WHERE u.id = @Id";
 
-        var users = await _dbHelper.QueryAsync<User, Role, User>(
+        var result = await _dbHelper.QueryAsync<User, Role, User>(
             sql,
             (user, role) =>
             {
-                user.Role = role;
+                if (role?.Id != Guid.Empty)
+                {
+                    user.Role = role;
+                }
                 return user;
             },
             new { Id = id },
-            splitOn: "id"
+            splitOn: "RoleId"
         );
 
-        return users.FirstOrDefault();
+        return result.FirstOrDefault();
     }
 
     public async Task<User?> GetByUsernameAsync(string username)
@@ -43,23 +46,26 @@ public class UserRepository : IUserRepository
             SELECT u.id, u.username, u.email, u.password_hash as PasswordHash, 
                    u.full_name as FullName, u.role_id as RoleId, u.is_active as IsActive,
                    u.created_at as CreatedAt, u.updated_at as UpdatedAt,
-                   r.id, r.name, r.code, r.description
+                   r.id as RoleId, r.code as Code, r.name as Name, r.description as Description
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.id
             WHERE u.username = @Username";
 
-        var users = await _dbHelper.QueryAsync<User, Role, User>(
+        var result = await _dbHelper.QueryAsync<User, Role, User>(
             sql,
             (user, role) =>
             {
-                user.Role = role;
+                if (role?.Id != Guid.Empty)
+                {
+                    user.Role = role;
+                }
                 return user;
             },
             new { Username = username },
-            splitOn: "id"
+            splitOn: "RoleId"
         );
 
-        return users.FirstOrDefault();
+        return result.FirstOrDefault();
     }
 
     public async Task<User?> GetByEmailAsync(string email)
@@ -68,23 +74,26 @@ public class UserRepository : IUserRepository
             SELECT u.id, u.username, u.email, u.password_hash as PasswordHash, 
                    u.full_name as FullName, u.role_id as RoleId, u.is_active as IsActive,
                    u.created_at as CreatedAt, u.updated_at as UpdatedAt,
-                   r.id, r.name, r.code, r.description
+                   r.id as RoleId, r.code as Code, r.name as Name, r.description as Description
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.id
             WHERE u.email = @Email";
 
-        var users = await _dbHelper.QueryAsync<User, Role, User>(
+        var result = await _dbHelper.QueryAsync<User, Role, User>(
             sql,
             (user, role) =>
             {
-                user.Role = role;
+                if (role?.Id != Guid.Empty)
+                {
+                    user.Role = role;
+                }
                 return user;
             },
             new { Email = email },
-            splitOn: "id"
+            splitOn: "RoleId"
         );
 
-        return users.FirstOrDefault();
+        return result.FirstOrDefault();
     }
 
     public async Task<IEnumerable<User>> GetAllAsync()
@@ -93,7 +102,7 @@ public class UserRepository : IUserRepository
             SELECT u.id, u.username, u.email, u.password_hash as PasswordHash, 
                    u.full_name as FullName, u.role_id as RoleId, u.is_active as IsActive,
                    u.created_at as CreatedAt, u.updated_at as UpdatedAt,
-                   r.id, r.name, r.code, r.description
+                   r.id as RoleId, r.code as Code, r.name as Name, r.description as Description
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.id
             ORDER BY u.created_at DESC";
@@ -102,10 +111,13 @@ public class UserRepository : IUserRepository
             sql,
             (user, role) =>
             {
-                user.Role = role;
+                if (role?.Id != Guid.Empty)
+                {
+                    user.Role = role;
+                }
                 return user;
             },
-            splitOn: "id"
+            splitOn: "RoleId"
         );
     }
 
@@ -115,7 +127,7 @@ public class UserRepository : IUserRepository
             SELECT u.id, u.username, u.email, u.password_hash as PasswordHash, 
                    u.full_name as FullName, u.role_id as RoleId, u.is_active as IsActive,
                    u.created_at as CreatedAt, u.updated_at as UpdatedAt,
-                   r.id, r.name, r.code, r.description
+                   r.id as RoleId, r.code as Code, r.name as Name, r.description as Description
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.id
             WHERE r.code = @RoleCode
@@ -125,11 +137,14 @@ public class UserRepository : IUserRepository
             sql,
             (user, role) =>
             {
-                user.Role = role;
+                if (role?.Id != Guid.Empty)
+                {
+                    user.Role = role;
+                }
                 return user;
             },
             new { RoleCode = roleCode },
-            splitOn: "id"
+            splitOn: "RoleId"
         );
     }
 

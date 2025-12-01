@@ -78,7 +78,6 @@ public class DbHelper : IDbHelper
     public async Task<T> ExecuteScalarAsync<T>(string sql, object? parameters = null)
     {
         using var connection = CreateConnection();
-        var result = await connection.ExecuteScalarAsync<T>(sql, parameters);
-        return result!;
+        return await connection.ExecuteScalarAsync<T>(sql, parameters);
     }
 }
