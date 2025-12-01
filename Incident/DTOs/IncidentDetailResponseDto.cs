@@ -1,8 +1,7 @@
 namespace Incident.DTOs;
 
-public sealed class IncidentDetailResponseDto
+public class IncidentDetailResponseDto
 {
-    // Incident fields
     public Guid Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
@@ -19,8 +18,6 @@ public sealed class IncidentDetailResponseDto
     public string? SentToUserName { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
-    
-    // Action flags
     public List<string> NextActions { get; set; } = new();
     public bool CanSendToReview { get; set; }
     public bool CanAccept { get; set; }

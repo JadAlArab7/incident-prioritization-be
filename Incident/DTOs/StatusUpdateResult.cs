@@ -1,43 +1,59 @@
 namespace Incident.DTOs;
 
-public sealed class StatusUpdateResult
+public class StatusUpdateResult
 {
     public bool Success { get; set; }
+    public int StatusCode { get; set; }
     public string? ErrorMessage { get; set; }
-    public int? ErrorCode { get; set; } // 400, 403, 404, 409
-    public IncidentStatusUpdateResponseDto? Response { get; set; }
+    public IncidentStatusUpdateResponseDto? Data { get; set; }
 
-    public static StatusUpdateResult Ok(IncidentStatusUpdateResponseDto response) => new()
+    public static StatusUpdateResult Ok(IncidentStatusUpdateResponseDto data)
     {
-        Success = true,
-        Response = response
-    };
+        return new StatusUpdateResult
+        {
+            Success = true,
+            StatusCode = 200,
+            Data = data
+        };
+    }
 
-    public static StatusUpdateResult BadRequest(string message) => new()
+    public static StatusUpdateResult NotFound(string message)
     {
-        Success = false,
-        ErrorMessage = message,
-        ErrorCode = 400
-    };
+        return new StatusUpdateResult
+        {
+            Success = false,
+            StatusCode = 404,
+            ErrorMessage = message
+        };
+    }
 
-    public static StatusUpdateResult Forbidden(string message) => new()
+    public static StatusUpdateResult BadRequest(string message)
     {
-        Success = false,
-        ErrorMessage = message,
-        ErrorCode = 403
-    };
+        return new StatusUpdateResult
+        {
+            Success = false,
+            StatusCode = 400,
+            ErrorMessage = message
+        };
+    }
 
-    public static StatusUpdateResult NotFound(string message) => new()
+    public static StatusUpdateResult Forbidden(string message)
     {
-        Success = false,
-        ErrorMessage = message,
-        ErrorCode = 404
-    };
+        return new StatusUpdateResult
+        {
+            Success = false,
+            StatusCode = 403,
+            ErrorMessage = message
+        };
+    }
 
-    public static StatusUpdateResult Conflict(string message) => new()
+    public static StatusUpdateResult Conflict(string message)
     {
-        Success = false,
-        ErrorMessage = message,
-        ErrorCode = 409
-    };
+        return new StatusUpdateResult
+        {
+            Success = false,
+            StatusCode = 409,
+            ErrorMessage = message
+        };
+    }
 }

@@ -1,4 +1,3 @@
-using Incident.DTOs;
 using Incident.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,49 +16,38 @@ public class LookupsController : ControllerBase
         _lookupService = lookupService;
     }
 
-    [HttpGet("incident-types")]
-    public async Task<ActionResult<IEnumerable<IncidentTypeDto>>> GetIncidentTypes(CancellationToken ct)
+    [HttpGet("governorates")]
+    public async Task<IActionResult> GetGovernorates(CancellationToken ct)
     {
-        var result = await _lookupService.ListIncidentTypesAsync(ct);
-        return Ok(result);
+        var governorates = await _lookupService.GetGovernoratesAsync(ct);
+        return Ok(governorates);
+    }
+
+    [HttpGet("governorates/{governorateId:guid}/districts")]
+    public async Task<IActionResult> GetDistricts(Guid governorateId, CancellationToken ct)
+    {
+        var districts = await _lookupService.GetDistrictsByGovernorateAsync(governorateId, ct);
+        return Ok(districts);
+    }
+
+    [HttpGet("districts/{districtId:guid}/towns")]
+    public async Task<IActionResult> GetTowns(Guid districtId, CancellationToken ct)
+    {
+        var towns = await _lookupService.GetTownsByDistrictAsync(districtId, ct);
+        return Ok(towns);
+    }
+
+    [HttpGet("incident-types")]
+    public async Task<IActionResult> GetIncidentTypes(CancellationToken ct)
+    {
+        var types = await _lookupService.GetIncidentTypesAsync(ct);
+        return Ok(types);
     }
 
     [HttpGet("incident-statuses")]
-    public async Task<ActionResult<IEnumerable<IncidentStatusDto>>> GetIncidentStatuses(CancellationToken ct)
+    public async Task<IActionResult> GetIncidentStatuses(CancellationToken ct)
     {
-        var result = await _lookupService.ListIncidentStatusesAsync(ct);
-        return Ok(result);
-    }
-
-    [HttpGet("governorates")]
-    public async Task<ActionResult<IEnumerable<GeoLookupDto>>> GetGovernorates(CancellationToken ct)
-    {
-        var result = await _lookupService.ListGovernoratesAsync(ct);
-        return Ok(result);
-    }
-
-    [HttpGet("districts")]
-    public async Task<ActionResult<IEnumerable<GeoLookupDto>>> GetDistricts(
-        [FromQuery] Guid governorateId,
-        CancellationToken ct)
-    {
-        var result = await _lookupService.ListDistrictsAsync(governorateId, ct);
-        return Ok(result);
-    }
-
-    [HttpGet("towns")]
-    public async Task<ActionResult<IEnumerable<TownDto>>> GetTowns(
-        [FromQuery] Guid districtId,
-        CancellationToken ct)
-    {
-        var result = await _lookupService.ListTownsAsync(districtId, ct);
-        return Ok(result);
-    }
-
-    [HttpGet("secretaries")]
-    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetSecretaries(CancellationToken ct)
-    {
-        var result = await _lookupService.ListSecretariesAsync(ct);
-        return Ok(result);
+        var statuses = await _lookupService.GetIncidentStatusesAsync(ct);
+        return Ok(statuses);
     }
 }

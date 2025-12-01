@@ -16,14 +16,14 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<LoginResponseDto>> Login(
-        [FromBody] LoginRequestDto request,
-        CancellationToken ct)
+    public async Task<IActionResult> Login([FromBody] LoginRequestDto request, CancellationToken ct)
     {
         var result = await _authService.LoginAsync(request, ct);
-        
+
         if (result == null)
-            return Unauthorized(new { message = "Invalid username or password" });
+        {
+            return Unauthorized(new { error = "Invalid username or password" });
+        }
 
         return Ok(result);
     }

@@ -12,42 +12,27 @@ namespace Incident.Controllers;
 public class IncidentStatusController : ControllerBase
 {
     private readonly IIncidentStatusService _statusService;
-    private readonly ILogger<IncidentStatusController> _logger;
 
-    public IncidentStatusController(
-        IIncidentStatusService statusService,
-        ILogger<IncidentStatusController> logger)
+    public IncidentStatusController(IIncidentStatusService statusService)
     {
         _statusService = statusService;
-        _logger = logger;
     }
 
-    /// <summary>
-    /// Update incident status using action-based workflow
-    /// </summary>
-    /// <param name="id">Incident ID</param>
-    /// <param name="request">Status update request with action code</param>
-    /// <returns>Updated incident with action flags</returns>
-    [HttpPatch("{id}/status")]
-    [ProducesResponseType(typeof(IncidentStatusUpdateResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [HttpPatch("{id:guid}/status")]
     public async Task<IActionResult> UpdateStatus(
-        [FromRoute] Guid id,
+        Guid id,
         [FromBody] IncidentStatusUpdateRequestDto request,
         CancellationToken ct)
     {
-        var currentUserId = GetCurrentUserId();
-        if (currentUserId == null)
+        var userId = GetCurrentUserId();
+        if (userId == null)
         {
-            return Unauthorized("User ID not found in token");
+            return Unauthorized(new { error = "User not authenticated" });
         }
 
         var result = await _statusService.UpdateStatusAsync(
             id,
-            currentUserId.Value,
+            userId.Value,
             request.Action,
             request.Comment,
             request.NewSentToUserId,
@@ -55,66 +40,17 @@ public class IncidentStatusController : ControllerBase
 
         if (!result.Success)
         {
-            return result.ErrorCode switch
+            return result.StatusCode switch
             {
                 400 => BadRequest(new { error = result.ErrorMessage }),
-                403 => Forbid(),
+                403 => StatusCode(403, new { error = result.ErrorMessage }),
                 404 => NotFound(new { error = result.ErrorMessage }),
                 409 => Conflict(new { error = result.ErrorMessage }),
-                _ => BadRequest(new { error = result.ErrorMessage })
+                _ => StatusCode(500, new { error = result.ErrorMessage })
             };
         }
 
-        return Ok(result.Response);
-    }
-
-    /// <summary>
-    /// Get incident by ID with computed action flags for current user
-    /// </summary>
-    /// <param name="id">Incident ID</param>
-    /// <returns>Incident details with action flags</returns>
-    [HttpGet("{id}/details")]
-    [ProducesResponseType(typeof(IncidentDetailResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetIncidentWithFlags(
-        [FromRoute] Guid id,
-        CancellationToken ct)
-    {
-        var currentUserId = GetCurrentUserId();
-        if (currentUserId == null)
-        {
-            return Unauthorized("User ID not found in token");
-        }
-
-        var result = await _statusService.GetIncidentWithFlagsAsync(id, currentUserId.Value, ct);
-        if (result == null)
-        {
-            return NotFound(new { error = $"Incident with ID {id} not found" });
-        }
-
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Get action flags for an incident for the current user
-    /// </summary>
-    /// <param name="id">Incident ID</param>
-    /// <returns>Action flags</returns>
-    [HttpGet("{id}/actions")]
-    [ProducesResponseType(typeof(IncidentActionFlags), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetActionFlags(
-        [FromRoute] Guid id,
-        CancellationToken ct)
-    {
-        var currentUserId = GetCurrentUserId();
-        if (currentUserId == null)
-        {
-            return Unauthorized("User ID not found in token");
-        }
-
-        var flags = await _statusService.ComputeActionFlagsAsync(id, currentUserId.Value, ct);
-        return Ok(flags);
+        return Ok(result.Data);
     }
 
     private Guid? GetCurrentUserId()
