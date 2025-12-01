@@ -84,15 +84,14 @@ builder.Services.AddScoped<ILookupService, LookupService>();
 builder.Services.AddScoped<IIncidentStatusService, IncidentStatusService>();
 builder.Services.AddScoped<DbSeederService>();
 
-// Add CORS - Allow all origins, methods, and headers
+// Add CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader()
-              .WithExposedHeaders("*");
+              .AllowAnyHeader();
     });
 });
 
@@ -113,10 +112,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// CORS must be called before Authentication and Authorization
 app.UseCors("AllowAll");
-
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
