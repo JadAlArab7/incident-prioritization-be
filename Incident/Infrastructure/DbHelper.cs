@@ -25,6 +25,26 @@ public class DbHelper : IDbHelper
         return await connection.QueryAsync<T>(sql, parameters);
     }
 
+    public async Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TReturn>(
+        string sql,
+        Func<TFirst, TSecond, TReturn> map,
+        object? parameters = null,
+        string splitOn = "Id")
+    {
+        using var connection = CreateConnection();
+        return await connection.QueryAsync(sql, map, parameters, splitOn: splitOn);
+    }
+
+    public async Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TThird, TReturn>(
+        string sql,
+        Func<TFirst, TSecond, TThird, TReturn> map,
+        object? parameters = null,
+        string splitOn = "Id")
+    {
+        using var connection = CreateConnection();
+        return await connection.QueryAsync(sql, map, parameters, splitOn: splitOn);
+    }
+
     public async Task<T?> QuerySingleOrDefaultAsync<T>(string sql, object? parameters = null)
     {
         using var connection = CreateConnection();
@@ -58,6 +78,7 @@ public class DbHelper : IDbHelper
     public async Task<T> ExecuteScalarAsync<T>(string sql, object? parameters = null)
     {
         using var connection = CreateConnection();
-        return await connection.ExecuteScalarAsync<T>(sql, parameters);
+        var result = await connection.ExecuteScalarAsync<T>(sql, parameters);
+        return result!;
     }
 }
