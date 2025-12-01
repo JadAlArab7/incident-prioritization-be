@@ -1,5 +1,3 @@
-using System.Data;
-using Dapper;
 using Npgsql;
 
 namespace Incident.Infrastructure;
@@ -8,76 +6,88 @@ public class DbHelper : IDbHelper
 {
     private readonly string _connectionString;
 
+    public string ConnectionString => _connectionString;
+
     public DbHelper(IConfiguration configuration)
     {
         _connectionString = configuration.GetConnectionString("DefaultConnection") 
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
     }
 
-    public IDbConnection CreateConnection()
+    public async Task<int> ExecuteNonQueryAsync(string sql, CancellationToken ct = default, params NpgsqlParameter[] parameters)
     {
-        return new NpgsqlConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        
+        await using var command = new NpgsqlCommand(sql, connection);
+        if (parameters != null && parameters.Length > 0)
+        {
+            command.Parameters.AddRange(parameters);
+        }
+        
+        return await command.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<IEnumerable<T>> QueryAsync<T>(string sql, object? parameters = null)
+    public async Task<List<T>> ExecuteReaderAsync<T>(string sql, Func<NpgsqlDataReader, T> mapper, CancellationToken ct = default, params NpgsqlParameter[] parameters)
     {
-        using var connection = CreateConnection();
-        return await connection.QueryAsync<T>(sql, parameters);
+        var results = new List<T>();
+        
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        
+        await using var command = new NpgsqlCommand(sql, connection);
+        if (parameters != null && parameters.Length > 0)
+        {
+            command.Parameters.AddRange(parameters);
+        }
+        
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(mapper(reader));
+        }
+        
+        return results;
     }
 
-    public async Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TReturn>(
-        string sql,
-        Func<TFirst, TSecond, TReturn> map,
-        object? parameters = null,
-        string splitOn = "Id")
+    public async Task<T?> ExecuteReaderSingleAsync<T>(string sql, Func<NpgsqlDataReader, T> mapper, CancellationToken ct = default, params NpgsqlParameter[] parameters) where T : class
     {
-        using var connection = CreateConnection();
-        return await connection.QueryAsync(sql, map, parameters, splitOn: splitOn);
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        
+        await using var command = new NpgsqlCommand(sql, connection);
+        if (parameters != null && parameters.Length > 0)
+        {
+            command.Parameters.AddRange(parameters);
+        }
+        
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (await reader.ReadAsync(ct))
+        {
+            return mapper(reader);
+        }
+        
+        return null;
     }
 
-    public async Task<IEnumerable<TReturn>> QueryAsync<TFirst, TSecond, TThird, TReturn>(
-        string sql,
-        Func<TFirst, TSecond, TThird, TReturn> map,
-        object? parameters = null,
-        string splitOn = "Id")
+    public async Task<T?> ExecuteScalarAsync<T>(string sql, CancellationToken ct = default, params NpgsqlParameter[] parameters)
     {
-        using var connection = CreateConnection();
-        return await connection.QueryAsync(sql, map, parameters, splitOn: splitOn);
-    }
-
-    public async Task<T?> QuerySingleOrDefaultAsync<T>(string sql, object? parameters = null)
-    {
-        using var connection = CreateConnection();
-        return await connection.QuerySingleOrDefaultAsync<T>(sql, parameters);
-    }
-
-    public async Task<T?> QueryFirstOrDefaultAsync<T>(string sql, object? parameters = null)
-    {
-        using var connection = CreateConnection();
-        return await connection.QueryFirstOrDefaultAsync<T>(sql, parameters);
-    }
-
-    public async Task<T> QuerySingleAsync<T>(string sql, object? parameters = null)
-    {
-        using var connection = CreateConnection();
-        return await connection.QuerySingleAsync<T>(sql, parameters);
-    }
-
-    public async Task<T> QueryFirstAsync<T>(string sql, object? parameters = null)
-    {
-        using var connection = CreateConnection();
-        return await connection.QueryFirstAsync<T>(sql, parameters);
-    }
-
-    public async Task<int> ExecuteAsync(string sql, object? parameters = null)
-    {
-        using var connection = CreateConnection();
-        return await connection.ExecuteAsync(sql, parameters);
-    }
-
-    public async Task<T> ExecuteScalarAsync<T>(string sql, object? parameters = null)
-    {
-        using var connection = CreateConnection();
-        return await connection.ExecuteScalarAsync<T>(sql, parameters);
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        
+        await using var command = new NpgsqlCommand(sql, connection);
+        if (parameters != null && parameters.Length > 0)
+        {
+            command.Parameters.AddRange(parameters);
+        }
+        
+        var result = await command.ExecuteScalarAsync(ct);
+        
+        if (result == null || result == DBNull.Value)
+        {
+            return default;
+        }
+        
+        return (T)result;
     }
 }

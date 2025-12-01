@@ -1,5 +1,6 @@
 using Incident.Infrastructure;
 using Incident.Models;
+using Npgsql;
 
 namespace Incident.Repositories;
 
@@ -12,81 +13,64 @@ public class LookupRepository : ILookupRepository
         _dbHelper = dbHelper;
     }
 
-    public async Task<IEnumerable<Governorate>> GetGovernoratesAsync()
+    public async Task<List<Governorate>> GetGovernoratesAsync(CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT id, code, name_en as NameEn, name_ar as NameAr
-            FROM governorates
-            ORDER BY name_en";
-
-        return await _dbHelper.QueryAsync<Governorate>(sql);
+        const string sql = "SELECT id, name, code FROM incident.governorates ORDER BY name";
+        return await _dbHelper.ExecuteReaderAsync(sql, reader => new Governorate
+        {
+            Id = reader.GetGuid(0),
+            Name = reader.GetString(1),
+            Code = reader.IsDBNull(2) ? null : reader.GetString(2)
+        }, ct);
     }
 
-    public async Task<IEnumerable<District>> GetDistrictsAsync(Guid governorateId)
+    public async Task<List<District>> GetDistrictsByGovernorateAsync(Guid governorateId, CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT id, governorate_id as GovernorateId, code, name_en as NameEn, name_ar as NameAr
-            FROM districts
-            WHERE governorate_id = @GovernorateId
-            ORDER BY name_en";
+        const string sql = "SELECT id, name, code, governorate_id FROM incident.districts WHERE governorate_id = @governorateId ORDER BY name";
+        var parameters = new[] { new NpgsqlParameter("@governorateId", governorateId) };
 
-        return await _dbHelper.QueryAsync<District>(sql, new { GovernorateId = governorateId });
+        return await _dbHelper.ExecuteReaderAsync(sql, reader => new District
+        {
+            Id = reader.GetGuid(0),
+            Name = reader.GetString(1),
+            Code = reader.IsDBNull(2) ? null : reader.GetString(2),
+            GovernorateId = reader.GetGuid(3)
+        }, ct, parameters);
     }
 
-    public async Task<IEnumerable<Town>> GetTownsAsync(Guid districtId)
+    public async Task<List<Town>> GetTownsByDistrictAsync(Guid districtId, CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT id, district_id as DistrictId, code, name_en as NameEn, name_ar as NameAr
-            FROM towns
-            WHERE district_id = @DistrictId
-            ORDER BY name_en";
+        const string sql = "SELECT id, name, code, district_id FROM incident.towns WHERE district_id = @districtId ORDER BY name";
+        var parameters = new[] { new NpgsqlParameter("@districtId", districtId) };
 
-        return await _dbHelper.QueryAsync<Town>(sql, new { DistrictId = districtId });
+        return await _dbHelper.ExecuteReaderAsync(sql, reader => new Town
+        {
+            Id = reader.GetGuid(0),
+            Name = reader.GetString(1),
+            Code = reader.IsDBNull(2) ? null : reader.GetString(2),
+            DistrictId = reader.GetGuid(3)
+        }, ct, parameters);
     }
 
-    public async Task<IEnumerable<IncidentType>> GetIncidentTypesAsync()
+    public async Task<List<IncidentType>> GetIncidentTypesAsync(CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT id, code, name, description
-            FROM incident_types
-            ORDER BY name";
-
-        return await _dbHelper.QueryAsync<IncidentType>(sql);
+        const string sql = "SELECT id, name, code FROM incident.incident_types ORDER BY name";
+        return await _dbHelper.ExecuteReaderAsync(sql, reader => new IncidentType
+        {
+            Id = reader.GetGuid(0),
+            Name = reader.GetString(1),
+            Code = reader.IsDBNull(2) ? null : reader.GetString(2)
+        }, ct);
     }
 
-    public async Task<IEnumerable<IncidentStatus>> GetIncidentStatusesAsync()
+    public async Task<List<IncidentStatus>> GetIncidentStatusesAsync(CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT id, code, name, description, is_terminal as IsTerminal
-            FROM incident_statuses
-            ORDER BY name";
-
-        return await _dbHelper.QueryAsync<IncidentStatus>(sql);
-    }
-
-    public async Task<IEnumerable<User>> GetOfficersAsync()
-    {
-        const string sql = @"
-            SELECT u.id, u.username, u.email, u.password_hash as PasswordHash, 
-                   u.full_name as FullName, u.role_id as RoleId, u.is_active as IsActive,
-                   u.created_at as CreatedAt, u.updated_at as UpdatedAt,
-                   r.id as RoleId, r.code as Code, r.name as Name, r.description as Description
-            FROM users u
-            LEFT JOIN roles r ON u.role_id = r.id
-            WHERE r.code = 'officer' AND u.is_active = true
-            ORDER BY u.full_name";
-
-        return await _dbHelper.QueryAsync<User, Role, User>(
-            sql,
-            (user, role) =>
-            {
-                if (role?.Id != Guid.Empty)
-                {
-                    user.Role = role;
-                }
-                return user;
-            },
-            splitOn: "RoleId"
-        );
+        const string sql = "SELECT id, name, code FROM incident.incident_statuses ORDER BY name";
+        return await _dbHelper.ExecuteReaderAsync(sql, reader => new IncidentStatus
+        {
+            Id = reader.GetGuid(0),
+            Name = reader.GetString(1),
+            Code = reader.IsDBNull(2) ? null : reader.GetString(2)
+        }, ct);
     }
 }

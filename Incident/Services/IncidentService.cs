@@ -8,35 +8,47 @@ public class IncidentService : IIncidentService
 {
     private readonly IIncidentRepository _incidentRepository;
     private readonly IIncidentStatusRepository _statusRepository;
-    private readonly ILookupRepository _lookupRepository;
 
     public IncidentService(
         IIncidentRepository incidentRepository,
-        IIncidentStatusRepository statusRepository,
-        ILookupRepository lookupRepository)
+        IIncidentStatusRepository statusRepository)
     {
         _incidentRepository = incidentRepository;
         _statusRepository = statusRepository;
-        _lookupRepository = lookupRepository;
     }
 
-    public async Task<IncidentRecord?> GetByIdAsync(Guid id)
+    public async Task<IncidentResponseDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        return await _incidentRepository.GetByIdAsync(id);
-    }
-
-    public async Task<PagedResponseDto<IncidentRecord>> GetPagedAsync(PagedRequestDto request)
-    {
-        return await _incidentRepository.GetPagedAsync(request);
-    }
-
-    public async Task<IncidentRecord> CreateAsync(IncidentCreateRequestDto request, Guid userId)
-    {
-        // Get the draft status
-        var draftStatus = await _statusRepository.GetByCodeAsync("draft");
-        if (draftStatus == null)
+        var incident = await _incidentRepository.GetByIdAsync(id, ct);
+        if (incident == null)
         {
-            throw new InvalidOperationException("Draft status not found");
+            return null;
+        }
+
+        return MapToResponseDto(incident);
+    }
+
+    public async Task<PagedResponseDto<IncidentResponseDto>> GetAllAsync(PagedRequestDto request, CancellationToken ct = default)
+    {
+        var incidents = await _incidentRepository.GetAllAsync(request.Page, request.PageSize, ct);
+        var totalCount = await _incidentRepository.GetTotalCountAsync(ct);
+
+        return new PagedResponseDto<IncidentResponseDto>
+        {
+            Items = incidents.Select(MapToResponseDto).ToList(),
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
+    }
+
+    public async Task<IncidentResponseDto> CreateAsync(IncidentCreateRequestDto request, Guid createdByUserId, CancellationToken ct = default)
+    {
+        // Get default status (draft)
+        var draftStatusId = await _statusRepository.GetStatusIdByCodeAsync("draft", ct);
+        if (draftStatusId == null)
+        {
+            throw new InvalidOperationException("Draft status not found in database");
         }
 
         var incident = new IncidentRecord
@@ -44,73 +56,69 @@ public class IncidentService : IIncidentService
             Title = request.Title,
             Description = request.Description,
             IncidentTypeId = request.IncidentTypeId,
+            StatusId = draftStatusId.Value,
             LocationId = request.LocationId,
-            CreatedByUserId = userId,
-            StatusId = draftStatus.Id
+            CreatedByUserId = createdByUserId
         };
 
-        return await _incidentRepository.CreateAsync(incident);
+        var id = await _incidentRepository.CreateAsync(incident, ct);
+        var created = await _incidentRepository.GetByIdAsync(id, ct);
+
+        return MapToResponseDto(created!);
     }
 
-    public async Task<IncidentRecord?> UpdateAsync(Guid id, IncidentUpdateRequestDto request, Guid userId)
+    public async Task<IncidentResponseDto?> UpdateAsync(Guid id, IncidentUpdateRequestDto request, CancellationToken ct = default)
     {
-        var existingIncident = await _incidentRepository.GetByIdAsync(id);
-        if (existingIncident == null)
+        var incident = await _incidentRepository.GetByIdAsync(id, ct);
+        if (incident == null)
         {
             return null;
         }
 
-        // Check if user can edit this incident
-        var status = await _statusRepository.GetByIdAsync(existingIncident.StatusId);
-        if (status == null)
-        {
-            throw new InvalidOperationException("Status not found");
-        }
+        incident.Title = request.Title ?? incident.Title;
+        incident.Description = request.Description ?? incident.Description;
+        incident.IncidentTypeId = request.IncidentTypeId ?? incident.IncidentTypeId;
+        incident.LocationId = request.LocationId ?? incident.LocationId;
 
-        bool isCreator = existingIncident.CreatedByUserId == userId;
-        bool canEdit = isCreator && (status.Code == "draft" || status.Code == "rejected");
+        await _incidentRepository.UpdateAsync(incident, ct);
+        var updated = await _incidentRepository.GetByIdAsync(id, ct);
 
-        if (!canEdit)
-        {
-            throw new UnauthorizedAccessException("You are not authorized to edit this incident");
-        }
-
-        existingIncident.Title = request.Title;
-        existingIncident.Description = request.Description;
-        existingIncident.IncidentTypeId = request.IncidentTypeId;
-        existingIncident.LocationId = request.LocationId;
-
-        var updatedIncident = await _incidentRepository.UpdateAsync(existingIncident);
-        return updatedIncident;
+        return MapToResponseDto(updated!);
     }
 
-    public async Task<bool> DeleteAsync(Guid id, Guid userId)
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        var existingIncident = await _incidentRepository.GetByIdAsync(id);
-        if (existingIncident == null)
-        {
-            return false;
-        }
+        return await _incidentRepository.DeleteAsync(id, ct);
+    }
 
-        // Only creator can delete and only when in draft or rejected status
-        bool isCreator = existingIncident.CreatedByUserId == userId;
-        if (!isCreator)
+    private static IncidentResponseDto MapToResponseDto(IncidentRecord incident)
+    {
+        return new IncidentResponseDto
         {
-            throw new UnauthorizedAccessException("Only the creator can delete this incident");
-        }
-
-        var status = await _statusRepository.GetByIdAsync(existingIncident.StatusId);
-        if (status == null)
-        {
-            throw new InvalidOperationException("Status not found");
-        }
-
-        bool canDelete = status.Code == "draft" || status.Code == "rejected";
-        if (!canDelete)
-        {
-            throw new UnauthorizedAccessException("Incident can only be deleted when in draft or rejected status");
-        }
-
-        return await _incidentRepository.DeleteAsync(id);
+            Id = incident.Id,
+            Title = incident.Title,
+            Description = incident.Description,
+            IncidentTypeId = incident.IncidentTypeId,
+            IncidentTypeName = incident.IncidentTypeName,
+            StatusId = incident.StatusId,
+            StatusName = incident.StatusName,
+            LocationId = incident.LocationId,
+            Location = incident.Location != null ? new LocationDto
+            {
+                Id = incident.Location.Id,
+                GovernorateId = incident.Location.GovernorateId,
+                GovernorateName = incident.Location.GovernorateName,
+                DistrictId = incident.Location.DistrictId,
+                DistrictName = incident.Location.DistrictName,
+                TownId = incident.Location.TownId,
+                TownName = incident.Location.TownName
+            } : null,
+            CreatedByUserId = incident.CreatedByUserId,
+            CreatedByUserName = incident.CreatedByUserName,
+            SentToUserId = incident.SentToUserId,
+            SentToUserName = incident.SentToUserName,
+            CreatedAt = incident.CreatedAt,
+            UpdatedAt = incident.UpdatedAt
+        };
     }
 }

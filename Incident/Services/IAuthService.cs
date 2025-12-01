@@ -4,5 +4,5 @@ namespace Incident.Services;
 
 public interface IAuthService
 {
-    Task<LoginResponseDto?> AuthenticateAsync(LoginRequestDto request);
+    Task<LoginResponseDto?> LoginAsync(LoginRequestDto request, CancellationToken ct = default);
 }

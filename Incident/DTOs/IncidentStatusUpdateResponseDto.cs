@@ -1,6 +1,6 @@
 namespace Incident.DTOs;
 
-public class IncidentStatusUpdateResponseDto
+public sealed class IncidentStatusUpdateResponseDto
 {
     public IncidentResponseDto Incident { get; set; } = null!;
     public List<string> NextActions { get; set; } = new();

@@ -2,84 +2,128 @@ using Incident.DTOs;
 using Incident.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Incident.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/incidents")]
 [Authorize]
 public class IncidentStatusController : ControllerBase
 {
-    private readonly IIncidentStatusService _incidentStatusService;
+    private readonly IIncidentStatusService _statusService;
+    private readonly ILogger<IncidentStatusController> _logger;
 
-    public IncidentStatusController(IIncidentStatusService incidentStatusService)
+    public IncidentStatusController(
+        IIncidentStatusService statusService,
+        ILogger<IncidentStatusController> logger)
     {
-        _incidentStatusService = incidentStatusService;
+        _statusService = statusService;
+        _logger = logger;
     }
 
-    [HttpGet("{incidentId:guid}/actions")]
-    public async Task<ActionResult<IncidentActionFlags>> GetActions(Guid incidentId)
+    /// <summary>
+    /// Update incident status using action-based workflow
+    /// </summary>
+    /// <param name="id">Incident ID</param>
+    /// <param name="request">Status update request with action code</param>
+    /// <returns>Updated incident with action flags</returns>
+    [HttpPatch("{id}/status")]
+    [ProducesResponseType(typeof(IncidentStatusUpdateResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateStatus(
+        [FromRoute] Guid id,
+        [FromBody] IncidentStatusUpdateRequestDto request,
+        CancellationToken ct)
     {
-        var userId = GetUserId();
-        if (userId == Guid.Empty)
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null)
         {
-            return Unauthorized();
+            return Unauthorized("User ID not found in token");
         }
 
-        var actionFlags = await _incidentStatusService.GetActionFlagsAsync(incidentId, userId);
-        return Ok(actionFlags);
-    }
+        var result = await _statusService.UpdateStatusAsync(
+            id,
+            currentUserId.Value,
+            request.Action,
+            request.Comment,
+            request.NewSentToUserId,
+            ct);
 
-    [HttpPatch("{incidentId:guid}/status")]
-    public async Task<ActionResult<IncidentStatusUpdateResponseDto>> UpdateStatus(
-        Guid incidentId,
-        IncidentStatusUpdateRequestDto request)
-    {
-        var userId = GetUserId();
-        if (userId == Guid.Empty)
-        {
-            return Unauthorized();
-        }
-
-        var result = await _incidentStatusService.UpdateStatusAsync(incidentId, userId, request);
         if (!result.Success)
         {
-            return BadRequest(new { error = result.ErrorMessage });
+            return result.ErrorCode switch
+            {
+                400 => BadRequest(new { error = result.ErrorMessage }),
+                403 => Forbid(),
+                404 => NotFound(new { error = result.ErrorMessage }),
+                409 => Conflict(new { error = result.ErrorMessage }),
+                _ => BadRequest(new { error = result.ErrorMessage })
+            };
         }
 
-        var response = new IncidentStatusUpdateResponseDto
-        {
-            Incident = new IncidentResponseDto
-            {
-                Id = result.Incident.Id,
-                Title = result.Incident.Title,
-                Description = result.Incident.Description,
-                IncidentTypeId = result.Incident.IncidentTypeId,
-                IncidentTypeName = result.Incident.IncidentTypeName,
-                StatusId = result.Incident.StatusId,
-                StatusName = result.Incident.StatusName,
-                LocationId = result.Incident.LocationId,
-                Location = result.Incident.Location,
-                CreatedByUserId = result.Incident.CreatedByUserId,
-                CreatedByUserName = result.Incident.CreatedByUserName,
-                SentToUserId = result.Incident.SentToUserId,
-                SentToUserName = result.Incident.SentToUserName,
-                CreatedAt = result.Incident.CreatedAt,
-                UpdatedAt = result.Incident.UpdatedAt
-            },
-            NextActions = result.ActionFlags.NextActions,
-            CanSendToReview = result.ActionFlags.CanSendToReview,
-            CanAccept = result.ActionFlags.CanAccept,
-            CanReject = result.ActionFlags.CanReject,
-            CanEdit = result.ActionFlags.CanEdit
-        };
-
-        return Ok(response);
+        return Ok(result.Response);
     }
 
-    private Guid GetUserId()
+    /// <summary>
+    /// Get incident by ID with computed action flags for current user
+    /// </summary>
+    /// <param name="id">Incident ID</param>
+    /// <returns>Incident details with action flags</returns>
+    [HttpGet("{id}/details")]
+    [ProducesResponseType(typeof(IncidentDetailResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetIncidentWithFlags(
+        [FromRoute] Guid id,
+        CancellationToken ct)
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(userIdClaim, out var userId) ? userId : Guid.Empty;
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null)
+        {
+            return Unauthorized("User ID not found in token");
+        }
+
+        var result = await _statusService.GetIncidentWithFlagsAsync(id, currentUserId.Value, ct);
+        if (result == null)
+        {
+            return NotFound(new { error = $"Incident with ID {id} not found" });
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get action flags for an incident for the current user
+    /// </summary>
+    /// <param name="id">Incident ID</param>
+    /// <returns>Action flags</returns>
+    [HttpGet("{id}/actions")]
+    [ProducesResponseType(typeof(IncidentActionFlags), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetActionFlags(
+        [FromRoute] Guid id,
+        CancellationToken ct)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == null)
+        {
+            return Unauthorized("User ID not found in token");
+        }
+
+        var flags = await _statusService.ComputeActionFlagsAsync(id, currentUserId.Value, ct);
+        return Ok(flags);
+    }
+
+    private Guid? GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return null;
+        }
+        return userId;
     }
 }

@@ -4,15 +4,11 @@ namespace Incident.Repositories;
 
 public interface IUserRepository
 {
-    Task<User?> GetByIdAsync(Guid id);
-    Task<User?> GetByUsernameAsync(string username);
-    Task<User?> GetByEmailAsync(string email);
-    Task<IEnumerable<User>> GetAllAsync();
-    Task<IEnumerable<User>> GetByRoleAsync(string roleCode);
-    Task<User> CreateAsync(User user);
-    Task<User?> UpdateAsync(User user);
-    Task<bool> DeleteAsync(Guid id);
-    Task<bool> ExistsAsync(Guid id);
-    Task<bool> UsernameExistsAsync(string username);
-    Task<bool> EmailExistsAsync(string email);
+    Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<User?> GetByUsernameAsync(string username, CancellationToken ct = default);
+    Task<User?> GetByEmailAsync(string email, CancellationToken ct = default);
+    Task<List<User>> GetAllAsync(CancellationToken ct = default);
+    Task<Guid> CreateAsync(User user, CancellationToken ct = default);
+    Task<bool> UpdateAsync(User user, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
 }

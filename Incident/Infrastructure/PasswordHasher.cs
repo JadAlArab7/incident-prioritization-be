@@ -2,6 +2,12 @@ using System.Security.Cryptography;
 
 namespace Incident.Infrastructure;
 
+public interface IPasswordHasher
+{
+    string HashPassword(string password);
+    bool VerifyPassword(string password, string hash);
+}
+
 public class PasswordHasher : IPasswordHasher
 {
     private const int SaltSize = 16;

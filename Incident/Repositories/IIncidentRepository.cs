@@ -1,15 +1,13 @@
 using Incident.Models;
-using Incident.DTOs;
 
 namespace Incident.Repositories;
 
 public interface IIncidentRepository
 {
-    Task<IncidentRecord?> GetByIdAsync(Guid id);
-    Task<PagedResponseDto<IncidentRecord>> GetPagedAsync(PagedRequestDto request);
-    Task<IncidentRecord> CreateAsync(IncidentRecord incident);
-    Task<IncidentRecord?> UpdateAsync(IncidentRecord incident);
-    Task<bool> UpdateStatusAsync(Guid incidentId, Guid statusId, Guid? sentToUserId);
-    Task<bool> DeleteAsync(Guid id);
-    Task<bool> ExistsAsync(Guid id);
+    Task<IncidentRecord?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<List<IncidentRecord>> GetAllAsync(int page, int pageSize, CancellationToken ct = default);
+    Task<int> GetTotalCountAsync(CancellationToken ct = default);
+    Task<Guid> CreateAsync(IncidentRecord incident, CancellationToken ct = default);
+    Task<bool> UpdateAsync(IncidentRecord incident, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
 }

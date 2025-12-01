@@ -11,114 +11,65 @@ namespace Incident.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
+    private readonly ILookupService _lookupService;
 
-    public UsersController(IUserService userService)
+    public UsersController(IUserService userService, ILookupService lookupService)
     {
         _userService = userService;
+        _lookupService = lookupService;
     }
 
     [HttpGet]
-    [Authorize(Roles = "admin")]
-    public async Task<ActionResult<IEnumerable<UserDto>>> GetAll()
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetAll(CancellationToken ct)
     {
-        var users = await _userService.GetAllAsync();
-        var userDtos = users.Select(u => new UserDto
+        var users = await _userService.GetAllAsync(ct);
+        var result = users.Select(u => new UserSummaryDto
         {
             Id = u.Id,
             Username = u.Username,
-            Email = u.Email,
-            FullName = u.FullName,
-            Role = u.Role?.Code ?? "user"
+            RoleName = u.Role?.Name
         });
-
-        return Ok(userDtos);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "admin")]
-    public async Task<ActionResult<UserDto>> GetById(Guid id)
+    public async Task<ActionResult<UserSummaryDto>> GetById(Guid id, CancellationToken ct)
     {
-        var user = await _userService.GetByIdAsync(id);
+        var user = await _userService.GetByIdAsync(id, ct);
         if (user == null)
-        {
             return NotFound();
-        }
 
-        var userDto = new UserDto
+        return Ok(new UserSummaryDto
         {
             Id = user.Id,
             Username = user.Username,
-            Email = user.Email,
-            FullName = user.FullName,
-            Role = user.Role?.Code ?? "user"
-        };
-
-        return Ok(userDto);
+            RoleName = user.Role?.Name
+        });
     }
 
     [HttpPost]
-    [Authorize(Roles = "admin")]
-    public async Task<ActionResult<UserDto>> Create(CreateUserDto createUserDto)
+    [Authorize(Roles = "supervisor,officer")]
+    public async Task<ActionResult<Guid>> Create([FromBody] CreateUserDto request, CancellationToken ct)
     {
-        try
-        {
-            var user = await _userService.CreateAsync(createUserDto);
-            var userDto = new UserDto
-            {
-                Id = user.Id,
-                Username = user.Username,
-                Email = user.Email,
-                FullName = user.FullName,
-                Role = user.Role?.Code ?? "user"
-            };
-
-            return CreatedAtAction(nameof(GetById), new { id = user.Id }, userDto);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
-
-    [HttpPut("{id:guid}")]
-    [Authorize(Roles = "admin")]
-    public async Task<ActionResult<UserDto>> Update(Guid id, CreateUserDto updateUserDto)
-    {
-        try
-        {
-            var user = await _userService.UpdateAsync(id, updateUserDto);
-            if (user == null)
-            {
-                return NotFound();
-            }
-
-            var userDto = new UserDto
-            {
-                Id = user.Id,
-                Username = user.Username,
-                Email = user.Email,
-                FullName = user.FullName,
-                Role = user.Role?.Code ?? "user"
-            };
-
-            return Ok(userDto);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var id = await _userService.CreateAsync(request, ct);
+        return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "admin")]
-    public async Task<IActionResult> Delete(Guid id)
+    [Authorize(Roles = "supervisor,officer")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var success = await _userService.DeleteAsync(id);
-        if (!success)
-        {
+        var deleted = await _userService.DeleteAsync(id, ct);
+        if (!deleted)
             return NotFound();
-        }
 
         return NoContent();
+    }
+
+    [HttpGet("secretaries")]
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetSecretaries(CancellationToken ct)
+    {
+        var secretaries = await _lookupService.ListSecretariesAsync(ct);
+        return Ok(secretaries);
     }
 }

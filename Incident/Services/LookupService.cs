@@ -1,4 +1,3 @@
-using Incident.DTOs;
 using Incident.Models;
 using Incident.Repositories;
 
@@ -13,33 +12,28 @@ public class LookupService : ILookupService
         _lookupRepository = lookupRepository;
     }
 
-    public async Task<IEnumerable<Governorate>> GetGovernoratesAsync()
+    public async Task<List<Governorate>> GetGovernoratesAsync(CancellationToken ct = default)
     {
-        return await _lookupRepository.GetGovernoratesAsync();
+        return await _lookupRepository.GetGovernoratesAsync(ct);
     }
 
-    public async Task<IEnumerable<District>> GetDistrictsAsync(Guid governorateId)
+    public async Task<List<District>> GetDistrictsByGovernorateAsync(Guid governorateId, CancellationToken ct = default)
     {
-        return await _lookupRepository.GetDistrictsAsync(governorateId);
+        return await _lookupRepository.GetDistrictsByGovernorateAsync(governorateId, ct);
     }
 
-    public async Task<IEnumerable<Town>> GetTownsAsync(Guid districtId)
+    public async Task<List<Town>> GetTownsByDistrictAsync(Guid districtId, CancellationToken ct = default)
     {
-        return await _lookupRepository.GetTownsAsync(districtId);
+        return await _lookupRepository.GetTownsByDistrictAsync(districtId, ct);
     }
 
-    public async Task<IEnumerable<IncidentType>> GetIncidentTypesAsync()
+    public async Task<List<IncidentType>> GetIncidentTypesAsync(CancellationToken ct = default)
     {
-        return await _lookupRepository.GetIncidentTypesAsync();
+        return await _lookupRepository.GetIncidentTypesAsync(ct);
     }
 
-    public async Task<IEnumerable<IncidentStatus>> GetIncidentStatusesAsync()
+    public async Task<List<IncidentStatus>> GetIncidentStatusesAsync(CancellationToken ct = default)
     {
-        return await _lookupRepository.GetIncidentStatusesAsync();
-    }
-
-    public async Task<IEnumerable<User>> GetOfficersAsync()
-    {
-        return await _lookupRepository.GetOfficersAsync();
+        return await _lookupRepository.GetIncidentStatusesAsync(ct);
     }
 }

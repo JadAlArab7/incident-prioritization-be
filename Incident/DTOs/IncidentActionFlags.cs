@@ -1,6 +1,6 @@
 namespace Incident.DTOs;
 
-public class IncidentActionFlags
+public sealed class IncidentActionFlags
 {
     public List<string> NextActions { get; set; } = new();
     public bool CanSendToReview { get; set; }

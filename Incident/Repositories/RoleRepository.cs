@@ -1,5 +1,6 @@
 using Incident.Infrastructure;
 using Incident.Models;
+using Npgsql;
 
 namespace Incident.Repositories;
 
@@ -12,91 +13,35 @@ public class RoleRepository : IRoleRepository
         _dbHelper = dbHelper;
     }
 
-    public async Task<Role?> GetByIdAsync(Guid id)
+    public async Task<Role?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT id, code, name, description
-            FROM roles
-            WHERE id = @Id";
+        const string sql = "SELECT id, code, name FROM incident.roles WHERE id = @id";
+        var parameters = new[] { new NpgsqlParameter("@id", id) };
 
-        return await _dbHelper.QuerySingleOrDefaultAsync<Role>(sql, new { Id = id });
+        return await _dbHelper.ExecuteReaderSingleAsync(sql, MapRole, ct, parameters);
     }
 
-    public async Task<Role?> GetByCodeAsync(string code)
+    public async Task<Role?> GetByCodeAsync(string code, CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT id, code, name, description
-            FROM roles
-            WHERE code = @Code";
+        const string sql = "SELECT id, code, name FROM incident.roles WHERE code = @code";
+        var parameters = new[] { new NpgsqlParameter("@code", code) };
 
-        return await _dbHelper.QuerySingleOrDefaultAsync<Role>(sql, new { Code = code });
+        return await _dbHelper.ExecuteReaderSingleAsync(sql, MapRole, ct, parameters);
     }
 
-    public async Task<IEnumerable<Role>> GetAllAsync()
+    public async Task<List<Role>> GetAllAsync(CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT id, code, name, description
-            FROM roles
-            ORDER BY name";
-
-        return await _dbHelper.QueryAsync<Role>(sql);
+        const string sql = "SELECT id, code, name FROM incident.roles ORDER BY name";
+        return await _dbHelper.ExecuteReaderAsync(sql, MapRole, ct);
     }
 
-    public async Task<Role> CreateAsync(Role role)
+    private static Role MapRole(NpgsqlDataReader reader)
     {
-        const string sql = @"
-            INSERT INTO roles (id, code, name, description)
-            VALUES (@Id, @Code, @Name, @Description)
-            RETURNING id, code, name, description";
-
-        role.Id = Guid.NewGuid();
-
-        var createdRole = await _dbHelper.QuerySingleOrDefaultAsync<Role>(sql, new
+        return new Role
         {
-            role.Id,
-            role.Code,
-            role.Name,
-            role.Description
-        });
-
-        return createdRole ?? role;
-    }
-
-    public async Task<Role?> UpdateAsync(Role role)
-    {
-        const string sql = @"
-            UPDATE roles 
-            SET code = @Code, name = @Name, description = @Description
-            WHERE id = @Id
-            RETURNING id, code, name, description";
-
-        return await _dbHelper.QuerySingleOrDefaultAsync<Role>(sql, new
-        {
-            role.Id,
-            role.Code,
-            role.Name,
-            role.Description
-        });
-    }
-
-    public async Task<bool> DeleteAsync(Guid id)
-    {
-        const string sql = "DELETE FROM roles WHERE id = @Id";
-        var rowsAffected = await _dbHelper.ExecuteAsync(sql, new { Id = id });
-        return rowsAffected > 0;
-    }
-
-    public async Task<bool> ExistsAsync(Guid id)
-    {
-        const string sql = "SELECT COUNT(1) FROM roles WHERE id = @Id";
-        var count = await _dbHelper.ExecuteScalarAsync<int>(sql, new { Id = id });
-        return count > 0;
-    }
-
-    public async Task<bool> CodeExistsAsync(string code)
-    {
-        const string sql = "SELECT COUNT(1) FROM roles WHERE code = @Code";
-        var count = await _dbHelper.ExecuteScalarAsync<int>(sql, new { Code = code });
-        return count > 0;
+            Id = reader.GetGuid(0),
+            Code = reader.GetString(1),
+            Name = reader.GetString(2)
+        };
     }
 }
