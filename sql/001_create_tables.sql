@@ -1,18 +1,15 @@
 -- Create the incident schema
 CREATE SCHEMA IF NOT EXISTS incident;
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Create roles table in incident schema
 CREATE TABLE IF NOT EXISTS incident.roles (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name        TEXT NOT NULL UNIQUE CHECK (name IN ('secretary', 'officer', 'supervisor'))
 );
 
 -- Create users table in incident schema
 CREATE TABLE IF NOT EXISTS incident.users (
-    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username         TEXT NOT NULL UNIQUE,
     password_hash    BYTEA NOT NULL,
     password_salt    BYTEA NOT NULL,
