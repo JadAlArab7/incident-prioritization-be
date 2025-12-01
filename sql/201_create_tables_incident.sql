@@ -1,8 +1,6 @@
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- A reusable location row referencing geo lookups
 CREATE TABLE IF NOT EXISTS incident.locations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lat DOUBLE PRECISION NOT NULL,
   lng DOUBLE PRECISION NOT NULL,
   governorate_id UUID REFERENCES incident.governorates(id) ON DELETE SET NULL,
@@ -22,7 +20,7 @@ CREATE TABLE IF NOT EXISTS incident.incident_statuses (
 
 -- Incident types (many-to-many)
 CREATE TABLE IF NOT EXISTS incident.incident_types (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   name_en TEXT NOT NULL,
   name_ar TEXT NOT NULL
@@ -30,7 +28,7 @@ CREATE TABLE IF NOT EXISTS incident.incident_types (
 
 -- Main incident table
 CREATE TABLE IF NOT EXISTS incident.incidents (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   description TEXT,
   -- 'sentTo' links to users table
@@ -69,7 +67,7 @@ CREATE TABLE IF NOT EXISTS incident.incident_incident_types (
 
 -- Optional attachments table (for future uploadFile)
 CREATE TABLE IF NOT EXISTS incident.attachments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   incident_id UUID NOT NULL REFERENCES incident.incidents(id) ON DELETE CASCADE,
   file_name TEXT NOT NULL,
   content_type TEXT,
