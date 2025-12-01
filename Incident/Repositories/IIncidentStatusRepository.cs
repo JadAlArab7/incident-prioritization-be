@@ -4,10 +4,11 @@ namespace Incident.Repositories;
 
 public interface IIncidentStatusRepository
 {
-    Task<IncidentStatusTransition?> GetTransitionAsync(Guid fromStatusId, string actionCode, CancellationToken ct = default);
-    Task<List<IncidentStatusTransition>> GetTransitionsFromStatusAsync(Guid statusId, CancellationToken ct = default);
-    Task<Guid?> GetStatusIdByCodeAsync(string code, CancellationToken ct = default);
-    Task<string?> GetStatusCodeByIdAsync(Guid statusId, CancellationToken ct = default);
-    Task InsertStatusHistoryAsync(IncidentStatusHistory history, CancellationToken ct = default);
-    Task<List<IncidentStatusHistory>> GetStatusHistoryAsync(Guid incidentId, CancellationToken ct = default);
+    Task<IncidentStatus?> GetByIdAsync(Guid id);
+    Task<IncidentStatus?> GetByCodeAsync(string code);
+    Task<IEnumerable<IncidentStatus>> GetAllAsync();
+    Task<IEnumerable<IncidentStatusTransition>> GetTransitionsFromStatusAsync(Guid fromStatusId);
+    Task<IncidentStatusTransition?> GetTransitionAsync(Guid fromStatusId, string actionCode);
+    Task AddStatusHistoryAsync(IncidentStatusHistory history);
+    Task<IEnumerable<IncidentStatusHistory>> GetStatusHistoryAsync(Guid incidentId);
 }
