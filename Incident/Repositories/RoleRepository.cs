@@ -13,35 +13,45 @@ public class RoleRepository : IRoleRepository
         _dbHelper = dbHelper;
     }
 
-    public async Task<Role?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<Role?> GetByIdAsync(Guid id)
     {
-        const string sql = "SELECT id, code, name FROM incident.roles WHERE id = @id";
-        var parameters = new[] { new NpgsqlParameter("@id", id) };
+        const string sql = @"
+            SELECT id, name
+            FROM incident.roles
+            WHERE id = @Id";
 
-        return await _dbHelper.ExecuteReaderSingleAsync(sql, MapRole, ct, parameters);
-    }
-
-    public async Task<Role?> GetByCodeAsync(string code, CancellationToken ct = default)
-    {
-        const string sql = "SELECT id, code, name FROM incident.roles WHERE code = @code";
-        var parameters = new[] { new NpgsqlParameter("@code", code) };
-
-        return await _dbHelper.ExecuteReaderSingleAsync(sql, MapRole, ct, parameters);
-    }
-
-    public async Task<List<Role>> GetAllAsync(CancellationToken ct = default)
-    {
-        const string sql = "SELECT id, code, name FROM incident.roles ORDER BY name";
-        return await _dbHelper.ExecuteReaderAsync(sql, MapRole, ct);
-    }
-
-    private static Role MapRole(NpgsqlDataReader reader)
-    {
-        return new Role
+        return await _dbHelper.QuerySingleOrDefaultAsync(sql, reader => new Role
         {
             Id = reader.GetGuid(0),
-            Code = reader.GetString(1),
-            Name = reader.GetString(2)
-        };
+            Name = reader.GetString(1)
+        }, new NpgsqlParameter("@Id", id));
+    }
+
+    public async Task<Role?> GetByNameAsync(string name)
+    {
+        const string sql = @"
+            SELECT id, name
+            FROM incident.roles
+            WHERE name = @Name";
+
+        return await _dbHelper.QuerySingleOrDefaultAsync(sql, reader => new Role
+        {
+            Id = reader.GetGuid(0),
+            Name = reader.GetString(1)
+        }, new NpgsqlParameter("@Name", name));
+    }
+
+    public async Task<IEnumerable<Role>> GetAllAsync()
+    {
+        const string sql = @"
+            SELECT id, name
+            FROM incident.roles
+            ORDER BY name";
+
+        return await _dbHelper.QueryAsync(sql, reader => new Role
+        {
+            Id = reader.GetGuid(0),
+            Name = reader.GetString(1)
+        });
     }
 }

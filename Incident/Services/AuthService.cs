@@ -24,48 +24,41 @@ public class AuthService : IAuthService
         _jwtSettings = jwtSettings;
     }
 
-    public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request, CancellationToken ct = default)
+    public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
     {
-        var user = await _userRepository.GetByUsernameAsync(request.Username, ct);
+        var user = await _userRepository.GetByUsernameAsync(request.Username);
         if (user == null)
         {
             return null;
         }
 
-        if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
+        if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
         {
             return null;
         }
 
-        if (!user.IsActive)
-        {
-            return null;
-        }
-
-        var token = GenerateJwtToken(user);
+        var token = GenerateJwtToken(user.Id, user.Username, user.RoleName ?? "");
 
         return new LoginResponseDto
         {
             Token = token,
             UserId = user.Id,
             Username = user.Username,
-            Email = user.Email,
-            FullName = user.FullName,
-            RoleName = user.RoleName
+            RoleName = user.RoleName ?? ""
         };
     }
 
-    private string GenerateJwtToken(Models.User user)
+    private string GenerateJwtToken(Guid userId, string username, string roleName)
     {
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Role, user.RoleName ?? "user")
+            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new Claim(JwtRegisteredClaimNames.UniqueName, username),
+            new Claim(ClaimTypes.Role, roleName),
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
         var token = new JwtSecurityToken(

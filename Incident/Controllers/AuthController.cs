@@ -16,9 +16,14 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequestDto request, CancellationToken ct)
+    public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
-        var result = await _authService.LoginAsync(request, ct);
+        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+        {
+            return BadRequest(new { error = "Username and password are required" });
+        }
+
+        var result = await _authService.LoginAsync(request);
 
         if (result == null)
         {

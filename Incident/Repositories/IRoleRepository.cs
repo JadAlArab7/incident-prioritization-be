@@ -1,10 +1,10 @@
-using Incident.Models;
-
 namespace Incident.Repositories;
+
+using Incident.Models;
 
 public interface IRoleRepository
 {
-    Task<Role?> GetByIdAsync(Guid id, CancellationToken ct = default);
-    Task<Role?> GetByCodeAsync(string code, CancellationToken ct = default);
-    Task<List<Role>> GetAllAsync(CancellationToken ct = default);
+    Task<Role?> GetByIdAsync(Guid id);
+    Task<Role?> GetByNameAsync(string name);
+    Task<IEnumerable<Role>> GetAllAsync();
 }
