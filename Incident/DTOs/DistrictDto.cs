@@ -1,10 +1,9 @@
-namespace Incident.Models;
+namespace Incident.DTOs;
 
-public class District
+public class DistrictDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? NameAr { get; set; }
     public Guid GovernorateId { get; set; }
-    public Governorate? Governorate { get; set; }
 }

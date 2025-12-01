@@ -1,7 +1,7 @@
-using Incident.DTOs;
-using Incident.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Incident.DTOs;
+using Incident.Services;
 
 namespace Incident.Controllers;
 
@@ -18,48 +18,119 @@ public class LookupsController : ControllerBase
     }
 
     [HttpGet("incident-types")]
-    public async Task<ActionResult<IEnumerable<IncidentTypeDto>>> GetIncidentTypes(CancellationToken ct)
+    public async Task<ActionResult<IEnumerable<IncidentTypeDto>>> GetIncidentTypes()
     {
-        var result = await _lookupService.ListIncidentTypesAsync(ct);
-        return Ok(result);
+        var incidentTypes = await _lookupService.GetIncidentTypesAsync();
+        var dtos = incidentTypes.Select(it => new IncidentTypeDto
+        {
+            Id = it.Id,
+            Name = it.Name,
+            Description = it.Description
+        });
+
+        return Ok(dtos);
     }
 
     [HttpGet("incident-statuses")]
-    public async Task<ActionResult<IEnumerable<IncidentStatusDto>>> GetIncidentStatuses(CancellationToken ct)
+    public async Task<ActionResult<IEnumerable<IncidentStatusDto>>> GetIncidentStatuses()
     {
-        var result = await _lookupService.ListIncidentStatusesAsync(ct);
-        return Ok(result);
+        var statuses = await _lookupService.GetIncidentStatusesAsync();
+        var dtos = statuses.Select(s => new IncidentStatusDto
+        {
+            Id = s.Id,
+            Code = s.Code,
+            Name = s.Name,
+            Description = s.Description,
+            IsTerminal = s.IsTerminal
+        });
+
+        return Ok(dtos);
     }
 
     [HttpGet("governorates")]
-    public async Task<ActionResult<IEnumerable<GeoLookupDto>>> GetGovernorates(CancellationToken ct)
+    public async Task<ActionResult<IEnumerable<GovernorateDto>>> GetGovernorates()
     {
-        var result = await _lookupService.ListGovernoratesAsync(ct);
-        return Ok(result);
+        var governorates = await _lookupService.GetGovernoratesAsync();
+        var dtos = governorates.Select(g => new GovernorateDto
+        {
+            Id = g.Id,
+            Name = g.Name,
+            NameAr = g.NameAr
+        });
+
+        return Ok(dtos);
     }
 
     [HttpGet("districts")]
-    public async Task<ActionResult<IEnumerable<GeoLookupDto>>> GetDistricts(
-        [FromQuery] Guid governorateId,
-        CancellationToken ct)
+    public async Task<ActionResult<IEnumerable<DistrictDto>>> GetDistricts()
     {
-        var result = await _lookupService.ListDistrictsAsync(governorateId, ct);
-        return Ok(result);
+        var districts = await _lookupService.GetDistrictsAsync();
+        var dtos = districts.Select(d => new DistrictDto
+        {
+            Id = d.Id,
+            Name = d.Name,
+            NameAr = d.NameAr,
+            GovernorateId = d.GovernorateId
+        });
+
+        return Ok(dtos);
+    }
+
+    [HttpGet("districts/by-governorate/{governorateId:guid}")]
+    public async Task<ActionResult<IEnumerable<DistrictDto>>> GetDistrictsByGovernorate(Guid governorateId)
+    {
+        var districts = await _lookupService.GetDistrictsByGovernorateAsync(governorateId);
+        var dtos = districts.Select(d => new DistrictDto
+        {
+            Id = d.Id,
+            Name = d.Name,
+            NameAr = d.NameAr,
+            GovernorateId = d.GovernorateId
+        });
+
+        return Ok(dtos);
     }
 
     [HttpGet("towns")]
-    public async Task<ActionResult<IEnumerable<TownDto>>> GetTowns(
-        [FromQuery] Guid districtId,
-        CancellationToken ct)
+    public async Task<ActionResult<IEnumerable<TownDto>>> GetTowns()
     {
-        var result = await _lookupService.ListTownsAsync(districtId, ct);
-        return Ok(result);
+        var towns = await _lookupService.GetTownsAsync();
+        var dtos = towns.Select(t => new TownDto
+        {
+            Id = t.Id,
+            Name = t.Name,
+            NameAr = t.NameAr,
+            DistrictId = t.DistrictId
+        });
+
+        return Ok(dtos);
     }
 
-    [HttpGet("secretaries")]
-    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetSecretaries(CancellationToken ct)
+    [HttpGet("towns/by-district/{districtId:guid}")]
+    public async Task<ActionResult<IEnumerable<TownDto>>> GetTownsByDistrict(Guid districtId)
     {
-        var result = await _lookupService.ListSecretariesAsync(ct);
-        return Ok(result);
+        var towns = await _lookupService.GetTownsByDistrictAsync(districtId);
+        var dtos = towns.Select(t => new TownDto
+        {
+            Id = t.Id,
+            Name = t.Name,
+            NameAr = t.NameAr,
+            DistrictId = t.DistrictId
+        });
+
+        return Ok(dtos);
+    }
+
+    [HttpGet("roles")]
+    public async Task<ActionResult<IEnumerable<RoleDto>>> GetRoles()
+    {
+        var roles = await _lookupService.GetRolesAsync();
+        var dtos = roles.Select(r => new RoleDto
+        {
+            Id = r.Id,
+            Name = r.Name
+        });
+
+        return Ok(dtos);
     }
 }

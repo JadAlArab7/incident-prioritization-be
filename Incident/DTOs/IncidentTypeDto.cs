@@ -1,6 +1,6 @@
-namespace Incident.Models;
+namespace Incident.DTOs;
 
-public class IncidentType
+public class IncidentTypeDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
