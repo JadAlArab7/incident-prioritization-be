@@ -1,43 +1,42 @@
-using Incident.DTOs;
+using Incident.Infrastructure;
+using Incident.Models;
+using Incident.Repositories;
 
 namespace Incident.Services;
 
-public interface IDbSeederService
+public class DbSeederService
 {
-    Task SeedAdminUserAsync();
-}
+    private readonly IRoleRepository _roleRepository;
+    private readonly IUserRepository _userRepository;
 
-public class DbSeederService : IDbSeederService
-{
-    private readonly IUserService _userService;
-    private readonly ILogger<DbSeederService> _logger;
-
-    public DbSeederService(IUserService userService, ILogger<DbSeederService> logger)
+    public DbSeederService(IRoleRepository roleRepository, IUserRepository userRepository)
     {
-        _userService = userService;
-        _logger = logger;
+        _roleRepository = roleRepository;
+        _userRepository = userRepository;
     }
 
-    public async Task SeedAdminUserAsync()
+    public async Task SeedAsync(CancellationToken ct = default)
     {
-        const string adminUsername = "admin";
-        const string adminPassword = "Admin@123";
-        const string adminRole = "supervisor";
+        // Check if admin user exists
+        var adminUser = await _userRepository.GetByUsernameAsync("admin", ct);
+        if (adminUser != null)
+            return; // Already seeded
 
-        if (await _userService.UserExistsAsync(adminUsername))
-        {
-            _logger.LogInformation("Admin user already exists. Skipping seed.");
-            return;
-        }
+        // Get supervisor role
+        var supervisorRole = await _roleRepository.GetByNameAsync("supervisor", ct);
+        if (supervisorRole == null)
+            throw new InvalidOperationException("Supervisor role not found. Please run the SQL seed scripts first.");
 
-        var createUserDto = new CreateUserDto
+        // Create admin user
+        var (hash, salt) = PasswordHasher.HashPassword("admin123");
+        var admin = new User
         {
-            Username = adminUsername,
-            Password = adminPassword,
-            RoleName = adminRole
+            Username = "admin",
+            PasswordHash = hash,
+            PasswordSalt = salt,
+            RoleId = supervisorRole.Id
         };
 
-        var userId = await _userService.CreateUserAsync(createUserDto);
-        _logger.LogInformation("Admin user created with ID: {UserId}", userId);
+        await _userRepository.CreateAsync(admin, ct);
     }
 }

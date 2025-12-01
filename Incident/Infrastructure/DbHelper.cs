@@ -6,85 +6,56 @@ public class DbHelper : IDbHelper
 {
     private readonly string _connectionString;
 
-    public DbHelper(IConfiguration configuration)
+    public DbHelper(string connectionString)
     {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+        _connectionString = connectionString;
     }
 
-    public async Task<NpgsqlConnection> GetConnectionAsync()
+    public async Task<NpgsqlConnection> GetConnectionAsync(CancellationToken ct = default)
     {
         var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(ct);
         return connection;
     }
 
-    public async Task<T?> QuerySingleOrDefaultAsync<T>(string sql, Func<NpgsqlDataReader, T> mapper, params NpgsqlParameter[] parameters)
+    public async Task<NpgsqlDataReader> ExecuteReaderAsync(string sql, CancellationToken ct = default, params NpgsqlParameter[] parameters)
     {
-        await using var connection = await GetConnectionAsync();
+        var connection = await GetConnectionAsync(ct);
         await using var command = new NpgsqlCommand(sql, connection);
         
-        foreach (var parameter in parameters)
+        if (parameters != null && parameters.Length > 0)
         {
-            command.Parameters.Add(parameter);
+            command.Parameters.AddRange(parameters);
         }
 
-        await using var reader = await command.ExecuteReaderAsync();
-        
-        if (await reader.ReadAsync())
-        {
-            return mapper(reader);
-        }
-
-        return default;
+        // CommandBehavior.CloseConnection ensures connection is closed when reader is disposed
+        return await command.ExecuteReaderAsync(System.Data.CommandBehavior.CloseConnection, ct);
     }
 
-    public async Task<List<T>> QueryAsync<T>(string sql, Func<NpgsqlDataReader, T> mapper, params NpgsqlParameter[] parameters)
+    public async Task<int> ExecuteNonQueryAsync(string sql, CancellationToken ct = default, params NpgsqlParameter[] parameters)
     {
-        var results = new List<T>();
-
-        await using var connection = await GetConnectionAsync();
+        await using var connection = await GetConnectionAsync(ct);
         await using var command = new NpgsqlCommand(sql, connection);
         
-        foreach (var parameter in parameters)
+        if (parameters != null && parameters.Length > 0)
         {
-            command.Parameters.Add(parameter);
+            command.Parameters.AddRange(parameters);
         }
 
-        await using var reader = await command.ExecuteReaderAsync();
-        
-        while (await reader.ReadAsync())
-        {
-            results.Add(mapper(reader));
-        }
-
-        return results;
+        return await command.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<int> ExecuteAsync(string sql, params NpgsqlParameter[] parameters)
+    public async Task<T?> ExecuteScalarAsync<T>(string sql, CancellationToken ct = default, params NpgsqlParameter[] parameters)
     {
-        await using var connection = await GetConnectionAsync();
+        await using var connection = await GetConnectionAsync(ct);
         await using var command = new NpgsqlCommand(sql, connection);
         
-        foreach (var parameter in parameters)
+        if (parameters != null && parameters.Length > 0)
         {
-            command.Parameters.Add(parameter);
+            command.Parameters.AddRange(parameters);
         }
 
-        return await command.ExecuteNonQueryAsync();
-    }
-
-    public async Task<T?> ExecuteScalarAsync<T>(string sql, params NpgsqlParameter[] parameters)
-    {
-        await using var connection = await GetConnectionAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        
-        foreach (var parameter in parameters)
-        {
-            command.Parameters.Add(parameter);
-        }
-
-        var result = await command.ExecuteScalarAsync();
+        var result = await command.ExecuteScalarAsync(ct);
         
         if (result == null || result == DBNull.Value)
         {

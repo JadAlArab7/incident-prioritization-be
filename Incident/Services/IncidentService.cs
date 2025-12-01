@@ -55,7 +55,7 @@ public class IncidentService : IIncidentService
             CreatedByUserId = currentUserId,
             LocationId = locationId,
             Priority = request.Priority,
-            SuggestedActionsTaken = request.Sug­gestedActionsTaken,
+            SuggestedActionsTaken = request.SuggestedActionsTaken,
             StatusId = IncidentStatus.DraftId
         };
 

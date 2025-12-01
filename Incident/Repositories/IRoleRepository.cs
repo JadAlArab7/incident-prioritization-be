@@ -4,7 +4,7 @@ namespace Incident.Repositories;
 
 public interface IRoleRepository
 {
-    Task<Role?> GetByNameAsync(string name);
-    Task<Role?> GetByIdAsync(Guid id);
-    Task<List<Role>> GetAllAsync();
+    Task<Role?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<Role?> GetByNameAsync(string name, CancellationToken ct = default);
+    Task<IEnumerable<Role>> GetAllAsync(CancellationToken ct = default);
 }

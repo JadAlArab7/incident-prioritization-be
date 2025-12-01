@@ -64,11 +64,8 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 // Register Infrastructure
-builder.Services.AddSingleton<IDbHelper>(sp =>
-{
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
-    return new DbHelper(connectionString);
-});
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
+builder.Services.AddSingleton<IDbHelper>(new DbHelper(connectionString));
 
 // Register Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();

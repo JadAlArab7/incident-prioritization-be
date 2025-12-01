@@ -11,48 +11,65 @@ namespace Incident.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
+    private readonly ILookupService _lookupService;
 
-    public UsersController(IUserService userService)
+    public UsersController(IUserService userService, ILookupService lookupService)
     {
         _userService = userService;
+        _lookupService = lookupService;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetAll(CancellationToken ct)
+    {
+        var users = await _userService.GetAllAsync(ct);
+        var result = users.Select(u => new UserSummaryDto
+        {
+            Id = u.Id,
+            Username = u.Username,
+            RoleName = u.Role?.Name
+        });
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetById(Guid id)
+    public async Task<ActionResult<UserSummaryDto>> GetById(Guid id, CancellationToken ct)
     {
-        var user = await _userService.GetByIdAsync(id);
-
+        var user = await _userService.GetByIdAsync(id, ct);
         if (user == null)
-        {
-            return NotFound(new { message = "User not found." });
-        }
+            return NotFound();
 
-        return Ok(new
+        return Ok(new UserSummaryDto
         {
-            user.Id,
-            user.Username,
-            user.RoleName,
-            user.CreatedAt,
-            user.UpdatedAt
+            Id = user.Id,
+            Username = user.Username,
+            RoleName = user.Role?.Name
         });
     }
 
     [HttpPost]
-    [Authorize(Roles = "supervisor")]
-    [ProducesResponseType(StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Create([FromBody] CreateUserDto request)
+    [Authorize(Roles = "supervisor,officer")]
+    public async Task<ActionResult<Guid>> Create([FromBody] CreateUserDto request, CancellationToken ct)
     {
-        if (await _userService.UserExistsAsync(request.Username))
-        {
-            return Conflict(new { message = "Username already exists." });
-        }
+        var id = await _userService.CreateAsync(request, ct);
+        return CreatedAtAction(nameof(GetById), new { id }, new { id });
+    }
 
-        var userId = await _userService.CreateUserAsync(request);
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "supervisor,officer")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var deleted = await _userService.DeleteAsync(id, ct);
+        if (!deleted)
+            return NotFound();
 
-        return CreatedAtAction(nameof(GetById), new { id = userId }, new { id = userId });
+        return NoContent();
+    }
+
+    [HttpGet("secretaries")]
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetSecretaries(CancellationToken ct)
+    {
+        var secretaries = await _lookupService.ListSecretariesAsync(ct);
+        return Ok(secretaries);
     }
 }

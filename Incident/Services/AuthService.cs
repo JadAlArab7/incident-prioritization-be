@@ -4,7 +4,6 @@ using System.Text;
 using Incident.DTOs;
 using Incident.Infrastructure;
 using Incident.Repositories;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Incident.Services;
@@ -12,55 +11,44 @@ namespace Incident.Services;
 public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
-    private readonly IPasswordHasher _passwordHasher;
     private readonly JwtSettings _jwtSettings;
 
-    public AuthService(
-        IUserRepository userRepository,
-        IPasswordHasher passwordHasher,
-        IOptions<JwtSettings> jwtSettings)
+    public AuthService(IUserRepository userRepository, JwtSettings jwtSettings)
     {
         _userRepository = userRepository;
-        _passwordHasher = passwordHasher;
-        _jwtSettings = jwtSettings.Value;
+        _jwtSettings = jwtSettings;
     }
 
-    public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
+    public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByUsernameAsync(request.Username);
-
+        var user = await _userRepository.GetByUsernameAsync(request.Username, ct);
         if (user == null)
-        {
             return null;
-        }
 
-        if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
-        {
+        if (!PasswordHasher.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
             return null;
-        }
 
-        var token = GenerateJwtToken(user.Id, user.RoleName!);
+        var token = GenerateJwtToken(user.Id, user.Username, user.Role?.Name ?? "");
 
         return new LoginResponseDto
         {
+            Token = token,
             UserId = user.Id,
-            Jwt = token,
-            IsSec = user.RoleName == "secretary",
-            IsSupervisor = user.RoleName == "supervisor",
-            IsOfficer = user.RoleName == "officer"
+            Username = user.Username,
+            Role = user.Role?.Name ?? ""
         };
     }
 
-    private string GenerateJwtToken(Guid userId, string role)
+    private string GenerateJwtToken(Guid userId, string username, string role)
     {
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
         {
-            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new Claim(ClaimTypes.Role, role),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Name, username),
+            new Claim(ClaimTypes.Role, role)
         };
 
         var token = new JwtSecurityToken(

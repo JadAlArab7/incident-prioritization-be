@@ -2,43 +2,34 @@ using System.Security.Cryptography;
 
 namespace Incident.Infrastructure;
 
-public interface IPasswordHasher
-{
-    (byte[] hash, byte[] salt) HashPassword(string password);
-    bool VerifyPassword(string password, byte[] storedHash, byte[] storedSalt);
-}
-
-public class PasswordHasher : IPasswordHasher
+public static class PasswordHasher
 {
     private const int SaltSize = 32;
     private const int HashSize = 32;
-    private const int Iterations = 150000;
-    private static readonly HashAlgorithmName Algorithm = HashAlgorithmName.SHA256;
+    private const int Iterations = 100000;
 
-    public (byte[] hash, byte[] salt) HashPassword(string password)
+    public static (byte[] Hash, byte[] Salt) HashPassword(string password)
     {
         var salt = RandomNumberGenerator.GetBytes(SaltSize);
         var hash = Rfc2898DeriveBytes.Pbkdf2(
             password,
             salt,
             Iterations,
-            Algorithm,
-            HashSize
-        );
+            HashAlgorithmName.SHA256,
+            HashSize);
 
         return (hash, salt);
     }
 
-    public bool VerifyPassword(string password, byte[] storedHash, byte[] storedSalt)
+    public static bool VerifyPassword(string password, byte[] hash, byte[] salt)
     {
-        var hashToCompare = Rfc2898DeriveBytes.Pbkdf2(
+        var computedHash = Rfc2898DeriveBytes.Pbkdf2(
             password,
-            storedSalt,
+            salt,
             Iterations,
-            Algorithm,
-            HashSize
-        );
+            HashAlgorithmName.SHA256,
+            HashSize);
 
-        return CryptographicOperations.FixedTimeEquals(hashToCompare, storedHash);
+        return CryptographicOperations.FixedTimeEquals(computedHash, hash);
     }
 }

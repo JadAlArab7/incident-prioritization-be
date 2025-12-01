@@ -1,91 +1,135 @@
 using Incident.Infrastructure;
 using Incident.Models;
 using Npgsql;
-using NpgsqlTypes;
 
 namespace Incident.Repositories;
 
 public class UserRepository : IUserRepository
 {
-    private readonly IDbHelper _dbHelper;
+    private readonly IDbHelper _db;
 
-    public UserRepository(IDbHelper dbHelper)
+    public UserRepository(IDbHelper db)
     {
-        _dbHelper = dbHelper;
+        _db = db;
     }
 
-    public async Task<User?> GetByUsernameAsync(string username)
+    public async Task<User?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
         const string sql = @"
-            SELECT u.id, u.username, u.password_hash, u.password_salt, u.role_id, r.name as role_name, u.created_at, u.updated_at
+            SELECT u.id, u.username, u.password_hash, u.password_salt, u.role_id, 
+                   u.created_at, u.updated_at, r.name as role_name
             FROM incident.users u
-            INNER JOIN incident.roles r ON u.role_id = r.id
-            WHERE u.username = @username";
-
-        return await _dbHelper.QuerySingleOrDefaultAsync(
-            sql,
-            MapUser,
-            new NpgsqlParameter("@username", NpgsqlDbType.Text) { Value = username }
-        );
-    }
-
-    public async Task<User?> GetByIdAsync(Guid id)
-    {
-        const string sql = @"
-            SELECT u.id, u.username, u.password_hash, u.password_salt, u.role_id, r.name as role_name, u.created_at, u.updated_at
-            FROM incident.users u
-            INNER JOIN incident.roles r ON u.role_id = r.id
+            JOIN incident.roles r ON u.role_id = r.id
             WHERE u.id = @id";
 
-        return await _dbHelper.QuerySingleOrDefaultAsync(
-            sql,
-            MapUser,
-            new NpgsqlParameter("@id", NpgsqlDbType.Uuid) { Value = id }
-        );
+        await using var reader = await _db.ExecuteReaderAsync(sql, ct, new NpgsqlParameter("@id", id));
+
+        if (await reader.ReadAsync(ct))
+        {
+            return MapUserFromReader(reader);
+        }
+
+        return null;
     }
 
-    public async Task<Guid> CreateUserAsync(string username, byte[] passwordHash, byte[] passwordSalt, Guid roleId)
+    public async Task<User?> GetByUsernameAsync(string username, CancellationToken ct = default)
     {
         const string sql = @"
-            INSERT INTO incident.users (username, password_hash, password_salt, role_id)
-            VALUES (@username, @password_hash, @password_salt, @role_id)
+            SELECT u.id, u.username, u.password_hash, u.password_salt, u.role_id, 
+                   u.created_at, u.updated_at, r.name as role_name
+            FROM incident.users u
+            JOIN incident.roles r ON u.role_id = r.id
+            WHERE u.username = @username";
+
+        await using var reader = await _db.ExecuteReaderAsync(sql, ct, new NpgsqlParameter("@username", username));
+
+        if (await reader.ReadAsync(ct))
+        {
+            return MapUserFromReader(reader);
+        }
+
+        return null;
+    }
+
+    public async Task<Guid> CreateAsync(User user, CancellationToken ct = default)
+    {
+        const string sql = @"
+            INSERT INTO incident.users (id, username, password_hash, password_salt, role_id)
+            VALUES (@id, @username, @passwordHash, @passwordSalt, @roleId)
             RETURNING id";
 
-        var result = await _dbHelper.ExecuteScalarAsync<Guid>(
-            sql,
-            new NpgsqlParameter("@username", NpgsqlDbType.Text) { Value = username },
-            new NpgsqlParameter("@password_hash", NpgsqlDbType.Bytea) { Value = passwordHash },
-            new NpgsqlParameter("@password_salt", NpgsqlDbType.Bytea) { Value = passwordSalt },
-            new NpgsqlParameter("@role_id", NpgsqlDbType.Uuid) { Value = roleId }
-        );
+        var id = Guid.NewGuid();
+        await _db.ExecuteScalarAsync<Guid>(sql, ct,
+            new NpgsqlParameter("@id", id),
+            new NpgsqlParameter("@username", user.Username),
+            new NpgsqlParameter("@passwordHash", user.PasswordHash),
+            new NpgsqlParameter("@passwordSalt", user.PasswordSalt),
+            new NpgsqlParameter("@roleId", user.RoleId));
 
-        return result;
+        return id;
     }
 
-    public async Task<bool> UserExistsAsync(string username)
+    public async Task<bool> UpdateAsync(User user, CancellationToken ct = default)
     {
-        const string sql = "SELECT EXISTS(SELECT 1 FROM incident.users WHERE username = @username)";
+        const string sql = @"
+            UPDATE incident.users
+            SET username = @username, password_hash = @passwordHash, 
+                password_salt = @passwordSalt, role_id = @roleId, updated_at = NOW()
+            WHERE id = @id";
 
-        var result = await _dbHelper.ExecuteScalarAsync<bool>(
-            sql,
-            new NpgsqlParameter("@username", NpgsqlDbType.Text) { Value = username }
-        );
+        var rows = await _db.ExecuteNonQueryAsync(sql, ct,
+            new NpgsqlParameter("@id", user.Id),
+            new NpgsqlParameter("@username", user.Username),
+            new NpgsqlParameter("@passwordHash", user.PasswordHash),
+            new NpgsqlParameter("@passwordSalt", user.PasswordSalt),
+            new NpgsqlParameter("@roleId", user.RoleId));
 
-        return result;
+        return rows > 0;
     }
 
-    private static User MapUser(NpgsqlDataReader reader)
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        const string sql = "DELETE FROM incident.users WHERE id = @id";
+        var rows = await _db.ExecuteNonQueryAsync(sql, ct, new NpgsqlParameter("@id", id));
+        return rows > 0;
+    }
+
+    public async Task<IEnumerable<User>> GetAllAsync(CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT u.id, u.username, u.password_hash, u.password_salt, u.role_id, 
+                   u.created_at, u.updated_at, r.name as role_name
+            FROM incident.users u
+            JOIN incident.roles r ON u.role_id = r.id
+            ORDER BY u.username";
+
+        var users = new List<User>();
+        await using var reader = await _db.ExecuteReaderAsync(sql, ct);
+
+        while (await reader.ReadAsync(ct))
+        {
+            users.Add(MapUserFromReader(reader));
+        }
+
+        return users;
+    }
+
+    private static User MapUserFromReader(NpgsqlDataReader reader)
     {
         return new User
         {
-            Id = reader.GetGuid(reader.GetOrdinal("id")),
-            Username = reader.GetString(reader.GetOrdinal("username")),
-            PasswordHash = (byte[])reader["password_hash"],
-            PasswordSalt = (byte[])reader["password_salt"],
-            RoleId = reader.GetGuid(reader.GetOrdinal("role_id")),
-            RoleName = reader.GetString(reader.GetOrdinal("role_name")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("created_at")),
-            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("updated_at"))
+            Id = reader.GetGuid(0),
+            Username = reader.GetString(1),
+            PasswordHash = reader.IsDBNull(2) ? Array.Empty<byte>() : (byte[])reader[2],
+            PasswordSalt = reader.IsDBNull(3) ? Array.Empty<byte>() : (byte[])reader[3],
+            RoleId = reader.GetGuid(4),
+            CreatedAt = reader.GetDateTime(5),
+            UpdatedAt = reader.GetDateTime(6),
+            Role = new Role
+            {
+                Id = reader.GetGuid(4),
+                Name = reader.GetString(7)
+            }
         };
     }
 }
