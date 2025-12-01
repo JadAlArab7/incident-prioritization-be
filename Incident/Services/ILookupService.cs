@@ -1,12 +1,22 @@
-using Incident.Models;
+using Incident.DTOs;
 
 namespace Incident.Services;
 
 public interface ILookupService
 {
-    Task<List<Governorate>> GetGovernoratesAsync(CancellationToken ct = default);
-    Task<List<District>> GetDistrictsByGovernorateAsync(Guid governorateId, CancellationToken ct = default);
-    Task<List<Town>> GetTownsByDistrictAsync(Guid districtId, CancellationToken ct = default);
-    Task<List<IncidentType>> GetIncidentTypesAsync(CancellationToken ct = default);
-    Task<List<IncidentStatus>> GetIncidentStatusesAsync(CancellationToken ct = default);
+    Task<IEnumerable<UserSummaryDto>> ListSecretariesAsync(CancellationToken ct = default);
+    Task<IEnumerable<IncidentTypeDto>> ListIncidentTypesAsync(CancellationToken ct = default);
+    Task<IEnumerable<IncidentStatusDto>> ListIncidentStatusesAsync(CancellationToken ct = default);
+    Task<IEnumerable<GeoLookupDto>> ListGovernoratesAsync(CancellationToken ct = default);
+    Task<IEnumerable<GeoLookupDto>> ListDistrictsAsync(Guid governorateId, CancellationToken ct = default);
+    Task<IEnumerable<TownDto>> ListTownsAsync(Guid districtId, CancellationToken ct = default);
+}
+
+public class TownDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string NameAr { get; set; } = string.Empty;
+    public double? Lat { get; set; }
+    public double? Lng { get; set; }
 }

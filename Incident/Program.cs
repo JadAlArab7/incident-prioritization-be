@@ -82,6 +82,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IIncidentService, IncidentService>();
 builder.Services.AddScoped<ILookupService, LookupService>();
 builder.Services.AddScoped<IIncidentStatusService, IncidentStatusService>();
+builder.Services.AddScoped<DbSeederService>();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -95,6 +96,13 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Run database seeder
+using (var scope = app.Services.CreateScope())
+{
+    var seeder = scope.ServiceProvider.GetRequiredService<DbSeederService>();
+    await seeder.SeedAsync();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

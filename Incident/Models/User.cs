@@ -7,7 +7,9 @@ public class User
     public byte[] PasswordHash { get; set; } = Array.Empty<byte>();
     public byte[] PasswordSalt { get; set; } = Array.Empty<byte>();
     public Guid RoleId { get; set; }
-    public Role? Role { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    
+    // Navigation
+    public Role? Role { get; set; }
 }
