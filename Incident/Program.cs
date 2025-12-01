@@ -100,9 +100,9 @@ var app = builder.Build();
 // Seed database on startup (only in Development)
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    var seeder = scope.ServiceProvider.GetRequiredService<IDbSeederService>();
-    await seeder.SeedAsync();
+    //using var scope = app.Services.CreateScope();
+    //var seeder = scope.ServiceProvider.GetRequiredService<IDbSeederService>();
+    //await seeder.SeedAsync();
 }
 
 // Configure the HTTP request pipeline.
