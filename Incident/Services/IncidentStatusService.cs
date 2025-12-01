@@ -28,53 +28,63 @@ public class IncidentStatusService : IIncidentStatusService
             return new IncidentActionFlags();
         }
 
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user == null)
+        var status = await _statusRepository.GetByIdAsync(incident.StatusId);
+        if (status == null)
         {
             return new IncidentActionFlags();
         }
 
-        var currentStatus = await _statusRepository.GetByIdAsync(incident.StatusId);
-        if (currentStatus == null)
+        var currentUser = await _userRepository.GetByIdAsync(userId);
+        if (currentUser == null)
         {
             return new IncidentActionFlags();
         }
-
-        var transitions = await _statusRepository.GetTransitionsFromStatusAsync(incident.StatusId);
-        var nextActions = new List<string>();
 
         bool isCreator = incident.CreatedByUserId == userId;
         bool isAssignedOfficer = incident.SentToUserId == userId;
-        bool isOfficer = user.Role?.Code == "officer";
+        bool isOfficer = currentUser.Role?.Code == "officer";
 
-        foreach (var transition in transitions)
+        var nextActions = new List<string>();
+        bool canSendToReview = false;
+        bool canAccept = false;
+        bool canReject = false;
+        bool canEdit = false;
+
+        // Creator actions
+        if (isCreator)
         {
-            if (transition.Initiator == "creator" && isCreator)
+            canEdit = status.Code == "draft" || status.Code == "rejected";
+
+            if (status.Code == "draft" || status.Code == "rejected")
             {
-                nextActions.Add(transition.ActionCode);
-            }
-            else if (transition.Initiator == "officer" && isAssignedOfficer && isOfficer)
-            {
-                nextActions.Add(transition.ActionCode);
+                nextActions.Add("send_to_review");
+                canSendToReview = true;
             }
         }
 
-        bool canEdit = isCreator && (currentStatus.Code == "draft" || currentStatus.Code == "rejected");
+        // Officer actions
+        if (isOfficer && isAssignedOfficer)
+        {
+            if (status.Code == "in_review")
+            {
+                nextActions.Add("accept");
+                nextActions.Add("reject");
+                canAccept = true;
+                canReject = true;
+            }
+        }
 
         return new IncidentActionFlags
         {
             NextActions = nextActions,
-            CanSendToReview = nextActions.Contains("send_to_review"),
-            CanAccept = nextActions.Contains("accept"),
-            CanReject = nextActions.Contains("reject"),
+            CanSendToReview = canSendToReview,
+            CanAccept = canAccept,
+            CanReject = canReject,
             CanEdit = canEdit
         };
     }
 
-    public async Task<StatusUpdateResult> UpdateStatusAsync(
-        Guid incidentId,
-        Guid userId,
-        IncidentStatusUpdateRequestDto request)
+    public async Task<StatusUpdateResult> UpdateStatusAsync(Guid incidentId, Guid userId, IncidentStatusUpdateRequestDto request)
     {
         var incident = await _incidentRepository.GetByIdAsync(incidentId);
         if (incident == null)
@@ -86,8 +96,8 @@ public class IncidentStatusService : IIncidentStatusService
             };
         }
 
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user == null)
+        var currentUser = await _userRepository.GetByIdAsync(userId);
+        if (currentUser == null)
         {
             return new StatusUpdateResult
             {
@@ -96,164 +106,68 @@ public class IncidentStatusService : IIncidentStatusService
             };
         }
 
-        var currentStatus = await _statusRepository.GetByIdAsync(incident.StatusId);
-        if (currentStatus == null)
+        // Validate the action
+        var allowedTransitions = await _statusRepository.GetAllowedTransitionsAsync(incident.StatusId, request.Action, userId, incident.CreatedByUserId, incident.SentToUserId);
+        if (!allowedTransitions.Any())
         {
             return new StatusUpdateResult
             {
                 Success = false,
-                ErrorMessage = "Current status not found"
+                ErrorMessage = $"Action '{request.Action}' is not allowed from current status"
             };
         }
 
-        // Find the valid transition
-        var transition = await _statusRepository.GetTransitionAsync(
-            incident.StatusId,
-            request.Action);
-
-        if (transition == null)
+        var transition = allowedTransitions.First();
+        var targetStatus = await _statusRepository.GetByIdAsync(transition.ToStatusId);
+        if (targetStatus == null)
         {
             return new StatusUpdateResult
             {
                 Success = false,
-                ErrorMessage = $"Action '{request.Action}' is not allowed from status '{currentStatus.Code}'"
+                ErrorMessage = "Target status not found"
             };
         }
 
-        // Check authorization
-        bool isCreator = incident.CreatedByUserId == userId;
-        bool isAssignedOfficer = incident.SentToUserId == userId;
-        bool isOfficer = user.Role?.Code == "officer";
-
-        if (transition.Initiator == "creator" && !isCreator)
-        {
-            return new StatusUpdateResult
-            {
-                Success = false,
-                ErrorMessage = "Only the incident creator can perform this action"
-            };
-        }
-
-        if (transition.Initiator == "officer" && (!isAssignedOfficer || !isOfficer))
-        {
-            return new StatusUpdateResult
-            {
-                Success = false,
-                ErrorMessage = "Only the assigned officer can perform this action"
-            };
-        }
-
-        // Handle send_to_review action - requires newSentToUserId
+        // Update incident status
         Guid? newSentToUserId = incident.SentToUserId;
-        if (request.Action == "send_to_review")
+        if (request.Action == "send_to_review" && request.NewSentToUserId.HasValue)
         {
-            if (request.NewSentToUserId == null && incident.SentToUserId == null)
+            // Verify the target user is an officer
+            var targetUser = await _userRepository.GetByIdAsync(request.NewSentToUserId.Value);
+            if (targetUser?.Role?.Code != "officer")
             {
                 return new StatusUpdateResult
                 {
                     Success = false,
-                    ErrorMessage = "newSentToUserId is required when sending to review"
+                    ErrorMessage = "Target user must be an officer"
                 };
             }
-
-            if (request.NewSentToUserId != null)
-            {
-                var targetUser = await _userRepository.GetByIdAsync(request.NewSentToUserId.Value);
-                if (targetUser == null)
-                {
-                    return new StatusUpdateResult
-                    {
-                        Success = false,
-                        ErrorMessage = "Target user not found"
-                    };
-                }
-
-                if (targetUser.Role?.Code != "officer")
-                {
-                    return new StatusUpdateResult
-                    {
-                        Success = false,
-                        ErrorMessage = "Target user must have the officer role"
-                    };
-                }
-
-                newSentToUserId = request.NewSentToUserId;
-            }
+            newSentToUserId = request.NewSentToUserId.Value;
         }
 
-        // Update the incident status
-        var success = await _incidentRepository.UpdateStatusAsync(
-            incidentId,
-            transition.ToStatusId,
-            newSentToUserId);
-
+        var success = await _incidentRepository.UpdateStatusAsync(incidentId, targetStatus.Id, newSentToUserId);
         if (!success)
         {
             return new StatusUpdateResult
             {
                 Success = false,
-                ErrorMessage = "Failed to update incident status. It may have been modified by another user."
+                ErrorMessage = "Failed to update incident status"
             };
         }
 
-        // Record the status change in history
-        await _statusRepository.AddStatusHistoryAsync(new IncidentStatusHistory
-        {
-            Id = Guid.NewGuid(),
-            IncidentId = incidentId,
-            FromStatusId = incident.StatusId,
-            ToStatusId = transition.ToStatusId,
-            ChangedByUserId = userId,
-            Comment = request.Comment,
-            ChangedAt = DateTime.UtcNow
-        });
+        // Update the incident object with new status
+        incident.StatusId = targetStatus.Id;
+        incident.SentToUserId = newSentToUserId;
+        incident.UpdatedAt = DateTime.UtcNow;
 
-        // Get updated incident
-        var updatedIncident = await _incidentRepository.GetByIdAsync(incidentId);
+        // Get updated action flags
         var actionFlags = await GetActionFlagsAsync(incidentId, userId);
 
         return new StatusUpdateResult
         {
             Success = true,
-            Incident = updatedIncident,
+            Incident = incident,
             ActionFlags = actionFlags
-        };
-    }
-
-    public async Task<IncidentDetailResponseDto?> GetIncidentWithActionsAsync(Guid incidentId, Guid userId)
-    {
-        var incident = await _incidentRepository.GetByIdAsync(incidentId);
-        if (incident == null)
-        {
-            return null;
-        }
-
-        var actionFlags = await GetActionFlagsAsync(incidentId, userId);
-        var status = await _statusRepository.GetByIdAsync(incident.StatusId);
-
-        return new IncidentDetailResponseDto
-        {
-            Id = incident.Id,
-            Title = incident.Title,
-            Description = incident.Description,
-            IncidentTypeId = incident.IncidentTypeId,
-            IncidentTypeName = incident.IncidentTypeName,
-            StatusId = incident.StatusId,
-            StatusCode = status?.Code ?? "",
-            StatusName = status?.Name ?? "",
-            LocationId = incident.LocationId,
-            Location = incident.Location,
-            CreatedByUserId = incident.CreatedByUserId,
-            CreatedByUserName = incident.CreatedByUserName,
-            SentToUserId = incident.SentToUserId,
-            SentToUserName = incident.SentToUserName,
-            CreatedAt = incident.CreatedAt,
-            UpdatedAt = incident.UpdatedAt,
-            NextActions = actionFlags.NextActions,
-            CanSendToReview = actionFlags.CanSendToReview,
-            CanAccept = actionFlags.CanAccept,
-            CanReject = actionFlags.CanReject,
-            CanEdit = actionFlags.CanEdit
         };
     }
 }

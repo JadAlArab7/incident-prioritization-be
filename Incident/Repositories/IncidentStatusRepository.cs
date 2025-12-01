@@ -32,76 +32,32 @@ public class IncidentStatusRepository : IIncidentStatusRepository
         return await _dbHelper.QuerySingleOrDefaultAsync<IncidentStatus>(sql, new { Code = code });
     }
 
-    public async Task<IEnumerable<IncidentStatus>> GetAllAsync()
+    public async Task<IEnumerable<IncidentStatusTransition>> GetAllowedTransitionsAsync(
+        Guid fromStatusId, 
+        string action, 
+        Guid userId, 
+        Guid incidentCreatorId, 
+        Guid? incidentAssignedOfficerId)
     {
         const string sql = @"
-            SELECT id, code, name, description, is_terminal as IsTerminal
-            FROM incident_statuses
-            ORDER BY name";
+            SELECT ist.id, ist.from_status_id as FromStatusId, ist.to_status_id as ToStatusId, 
+                   ist.action_code as ActionCode, ist.initiator, ist.is_active as IsActive
+            FROM incident_status_transitions ist
+            WHERE ist.from_status_id = @FromStatusId 
+              AND ist.action_code = @ActionCode
+              AND ist.is_active = true
+              AND (
+                (ist.initiator = 'creator' AND @UserId = @IncidentCreatorId) OR
+                (ist.initiator = 'officer' AND @IncidentAssignedOfficerId = @UserId)
+              )";
 
-        return await _dbHelper.QueryAsync<IncidentStatus>(sql);
-    }
-
-    public async Task<IEnumerable<IncidentStatusTransition>> GetTransitionsFromStatusAsync(Guid fromStatusId)
-    {
-        const string sql = @"
-            SELECT id, from_status_id as FromStatusId, to_status_id as ToStatusId, 
-                   action_code as ActionCode, initiator, is_active as IsActive
-            FROM incident_status_transitions
-            WHERE from_status_id = @FromStatusId AND is_active = true";
-
-        return await _dbHelper.QueryAsync<IncidentStatusTransition>(sql, new { FromStatusId = fromStatusId });
-    }
-
-    public async Task<IncidentStatusTransition?> GetTransitionAsync(Guid fromStatusId, string actionCode)
-    {
-        const string sql = @"
-            SELECT id, from_status_id as FromStatusId, to_status_id as ToStatusId, 
-                   action_code as ActionCode, initiator, is_active as IsActive
-            FROM incident_status_transitions
-            WHERE from_status_id = @FromStatusId AND action_code = @ActionCode AND is_active = true";
-
-        return await _dbHelper.QuerySingleOrDefaultAsync<IncidentStatusTransition>(
-            sql, 
-            new { FromStatusId = fromStatusId, ActionCode = actionCode });
-    }
-
-    public async Task AddStatusHistoryAsync(IncidentStatusHistory history)
-    {
-        const string sql = @"
-            INSERT INTO incident_status_history 
-                (id, incident_id, from_status_id, to_status_id, changed_by_user_id, comment, changed_at)
-            VALUES 
-                (@Id, @IncidentId, @FromStatusId, @ToStatusId, @ChangedByUserId, @Comment, @ChangedAt)";
-
-        await _dbHelper.ExecuteAsync(sql, new
+        return await _dbHelper.QueryAsync<IncidentStatusTransition>(sql, new
         {
-            history.Id,
-            history.IncidentId,
-            history.FromStatusId,
-            history.ToStatusId,
-            history.ChangedByUserId,
-            history.Comment,
-            history.ChangedAt
+            FromStatusId = fromStatusId,
+            ActionCode = action,
+            UserId = userId,
+            IncidentCreatorId = incidentCreatorId,
+            IncidentAssignedOfficerId = incidentAssignedOfficerId
         });
-    }
-
-    public async Task<IEnumerable<IncidentStatusHistory>> GetStatusHistoryAsync(Guid incidentId)
-    {
-        const string sql = @"
-            SELECT h.id, h.incident_id as IncidentId, h.from_status_id as FromStatusId, 
-                   h.to_status_id as ToStatusId, h.changed_by_user_id as ChangedByUserId, 
-                   h.comment, h.changed_at as ChangedAt,
-                   u.full_name as ChangedByUserName,
-                   fs.name as FromStatusName,
-                   ts.name as ToStatusName
-            FROM incident_status_history h
-            LEFT JOIN users u ON h.changed_by_user_id = u.id
-            LEFT JOIN incident_statuses fs ON h.from_status_id = fs.id
-            LEFT JOIN incident_statuses ts ON h.to_status_id = ts.id
-            WHERE h.incident_id = @IncidentId
-            ORDER BY h.changed_at DESC";
-
-        return await _dbHelper.QueryAsync<IncidentStatusHistory>(sql, new { IncidentId = incidentId });
     }
 }
