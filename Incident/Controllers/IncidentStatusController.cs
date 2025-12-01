@@ -2,64 +2,84 @@ using Incident.DTOs;
 using Incident.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Incident.Controllers;
 
 [ApiController]
-[Route("api/incidents")]
+[Route("api/[controller]")]
 [Authorize]
 public class IncidentStatusController : ControllerBase
 {
-    private readonly IIncidentStatusService _statusService;
+    private readonly IIncidentStatusService _incidentStatusService;
 
-    public IncidentStatusController(IIncidentStatusService statusService)
+    public IncidentStatusController(IIncidentStatusService incidentStatusService)
     {
-        _statusService = statusService;
+        _incidentStatusService = incidentStatusService;
     }
 
-    [HttpPatch("{id:guid}/status")]
-    public async Task<IActionResult> UpdateStatus(
-        Guid id,
-        [FromBody] IncidentStatusUpdateRequestDto request,
-        CancellationToken ct)
+    [HttpGet("{incidentId:guid}/actions")]
+    public async Task<ActionResult<IncidentActionFlags>> GetActions(Guid incidentId)
     {
-        var userId = GetCurrentUserId();
-        if (userId == null)
+        var userId = GetUserId();
+        if (userId == Guid.Empty)
         {
-            return Unauthorized(new { error = "User not authenticated" });
+            return Unauthorized();
         }
 
-        var result = await _statusService.UpdateStatusAsync(
-            id,
-            userId.Value,
-            request.Action,
-            request.Comment,
-            request.NewSentToUserId,
-            ct);
+        var actionFlags = await _incidentStatusService.GetActionFlagsAsync(incidentId, userId);
+        return Ok(actionFlags);
+    }
 
+    [HttpPatch("{incidentId:guid}/status")]
+    public async Task<ActionResult<IncidentStatusUpdateResponseDto>> UpdateStatus(
+        Guid incidentId,
+        IncidentStatusUpdateRequestDto request)
+    {
+        var userId = GetUserId();
+        if (userId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _incidentStatusService.UpdateStatusAsync(incidentId, userId, request);
         if (!result.Success)
         {
-            return result.StatusCode switch
-            {
-                400 => BadRequest(new { error = result.ErrorMessage }),
-                403 => StatusCode(403, new { error = result.ErrorMessage }),
-                404 => NotFound(new { error = result.ErrorMessage }),
-                409 => Conflict(new { error = result.ErrorMessage }),
-                _ => StatusCode(500, new { error = result.ErrorMessage })
-            };
+            return BadRequest(new { error = result.ErrorMessage });
         }
 
-        return Ok(result.Data);
+        var response = new IncidentStatusUpdateResponseDto
+        {
+            Incident = new IncidentResponseDto
+            {
+                Id = result.Incident.Id,
+                Title = result.Incident.Title,
+                Description = result.Incident.Description,
+                IncidentTypeId = result.Incident.IncidentTypeId,
+                IncidentTypeName = result.Incident.IncidentTypeName,
+                StatusId = result.Incident.StatusId,
+                StatusName = result.Incident.StatusName,
+                LocationId = result.Incident.LocationId,
+                Location = result.Incident.Location,
+                CreatedByUserId = result.Incident.CreatedByUserId,
+                CreatedByUserName = result.Incident.CreatedByUserName,
+                SentToUserId = result.Incident.SentToUserId,
+                SentToUserName = result.Incident.SentToUserName,
+                CreatedAt = result.Incident.CreatedAt,
+                UpdatedAt = result.Incident.UpdatedAt
+            },
+            NextActions = result.ActionFlags.NextActions,
+            CanSendToReview = result.ActionFlags.CanSendToReview,
+            CanAccept = result.ActionFlags.CanAccept,
+            CanReject = result.ActionFlags.CanReject,
+            CanEdit = result.ActionFlags.CanEdit
+        };
+
+        return Ok(response);
     }
 
-    private Guid? GetCurrentUserId()
+    private Guid GetUserId()
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-        {
-            return null;
-        }
-        return userId;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(userIdClaim, out var userId) ? userId : Guid.Empty;
     }
 }

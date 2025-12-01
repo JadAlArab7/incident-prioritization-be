@@ -18,94 +18,105 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    [Authorize(Roles = "admin")]
+    public async Task<ActionResult<IEnumerable<UserDto>>> GetAll()
     {
         var users = await _userService.GetAllAsync();
-        var result = users.Select(u => new
+        var userDtos = users.Select(u => new UserDto
         {
-            u.Id,
-            u.Username,
-            u.RoleId,
-            u.RoleName,
-            u.CreatedAt,
-            u.UpdatedAt
+            Id = u.Id,
+            Username = u.Username,
+            Email = u.Email,
+            FullName = u.FullName,
+            Role = u.Role?.Code ?? "user"
         });
-        return Ok(result);
+
+        return Ok(userDtos);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id)
+    [Authorize(Roles = "admin")]
+    public async Task<ActionResult<UserDto>> GetById(Guid id)
     {
         var user = await _userService.GetByIdAsync(id);
         if (user == null)
         {
-            return NotFound(new { error = "User not found" });
+            return NotFound();
         }
 
-        return Ok(new
+        var userDto = new UserDto
         {
-            user.Id,
-            user.Username,
-            user.RoleId,
-            user.RoleName,
-            user.CreatedAt,
-            user.UpdatedAt
-        });
-    }
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            FullName = user.FullName,
+            Role = user.Role?.Code ?? "user"
+        };
 
-    [HttpGet("officers")]
-    public async Task<IActionResult> GetOfficers()
-    {
-        var officers = await _userService.GetOfficersAsync();
-        var result = officers.Select(u => new
-        {
-            u.Id,
-            u.Username,
-            u.RoleName
-        });
-        return Ok(result);
+        return Ok(userDto);
     }
 
     [HttpPost]
-    [Authorize(Roles = "supervisor")]
-    public async Task<IActionResult> Create([FromBody] CreateUserDto dto)
+    [Authorize(Roles = "admin")]
+    public async Task<ActionResult<UserDto>> Create(CreateUserDto createUserDto)
     {
-        if (string.IsNullOrWhiteSpace(dto.Username) || string.IsNullOrWhiteSpace(dto.Password))
-        {
-            return BadRequest(new { error = "Username and password are required" });
-        }
-
-        if (string.IsNullOrWhiteSpace(dto.RoleName))
-        {
-            return BadRequest(new { error = "Role name is required" });
-        }
-
         try
         {
-            var user = await _userService.CreateAsync(dto);
-            return CreatedAtAction(nameof(GetById), new { id = user.Id }, new
+            var user = await _userService.CreateAsync(createUserDto);
+            var userDto = new UserDto
             {
-                user.Id,
-                user.Username,
-                user.RoleId,
-                user.CreatedAt,
-                user.UpdatedAt
-            });
+                Id = user.Id,
+                Username = user.Username,
+                Email = user.Email,
+                FullName = user.FullName,
+                Role = user.Role?.Code ?? "user"
+            };
+
+            return CreatedAtAction(nameof(GetById), new { id = user.Id }, userDto);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = "admin")]
+    public async Task<ActionResult<UserDto>> Update(Guid id, CreateUserDto updateUserDto)
+    {
+        try
+        {
+            var user = await _userService.UpdateAsync(id, updateUserDto);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            var userDto = new UserDto
+            {
+                Id = user.Id,
+                Username = user.Username,
+                Email = user.Email,
+                FullName = user.FullName,
+                Role = user.Role?.Code ?? "user"
+            };
+
+            return Ok(userDto);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
         }
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "supervisor")]
+    [Authorize(Roles = "admin")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var deleted = await _userService.DeleteAsync(id);
-        if (!deleted)
+        var success = await _userService.DeleteAsync(id);
+        if (!success)
         {
-            return NotFound(new { error = "User not found" });
+            return NotFound();
         }
 
         return NoContent();

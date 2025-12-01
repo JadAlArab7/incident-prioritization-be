@@ -1,6 +1,8 @@
 using Incident.DTOs;
 using Incident.Infrastructure;
+using Incident.Models;
 using Incident.Repositories;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -17,58 +19,68 @@ public class AuthService : IAuthService
     public AuthService(
         IUserRepository userRepository,
         IPasswordHasher passwordHasher,
-        JwtSettings jwtSettings)
+        IOptions<JwtSettings> jwtSettings)
     {
         _userRepository = userRepository;
         _passwordHasher = passwordHasher;
-        _jwtSettings = jwtSettings;
+        _jwtSettings = jwtSettings.Value;
     }
 
-    public async Task<LoginResponseDto?> LoginAsync(LoginRequestDto request)
+    public async Task<LoginResponseDto?> AuthenticateAsync(LoginRequestDto request)
     {
+        // Get user by username
         var user = await _userRepository.GetByUsernameAsync(request.Username);
         if (user == null)
         {
             return null;
         }
 
-        if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash, user.PasswordSalt))
+        // Verify password
+        if (!_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
             return null;
         }
 
-        var token = GenerateJwtToken(user.Id, user.Username, user.RoleName ?? "");
+        // Generate JWT token
+        var token = GenerateJwtToken(user);
 
         return new LoginResponseDto
         {
             Token = token,
-            UserId = user.Id,
-            Username = user.Username,
-            RoleName = user.RoleName ?? ""
+            User = new UserDto
+            {
+                Id = user.Id,
+                Username = user.Username,
+                Email = user.Email,
+                FullName = user.FullName,
+                Role = user.Role?.Code ?? "user"
+            }
         };
     }
 
-    private string GenerateJwtToken(Guid userId, string username, string roleName)
+    private string GenerateJwtToken(User user)
     {
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
-        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.ASCII.GetBytes(_jwtSettings.SecretKey);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new Claim(JwtRegisteredClaimNames.UniqueName, username),
-            new Claim(ClaimTypes.Role, roleName),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Role, user.Role?.Code ?? "user")
         };
 
-        var token = new JwtSecurityToken(
-            issuer: _jwtSettings.Issuer,
-            audience: _jwtSettings.Audience,
-            claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
-            signingCredentials: credentials
-        );
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(claims),
+            Expires = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
+            Issuer = _jwtSettings.Issuer,
+            Audience = _jwtSettings.Audience,
+            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+        };
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        return tokenHandler.WriteToken(token);
     }
 }

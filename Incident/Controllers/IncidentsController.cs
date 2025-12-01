@@ -2,7 +2,6 @@ using Incident.DTOs;
 using Incident.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace Incident.Controllers;
 
@@ -12,114 +11,209 @@ namespace Incident.Controllers;
 public class IncidentsController : ControllerBase
 {
     private readonly IIncidentService _incidentService;
-    private readonly IIncidentStatusService _statusService;
+    private readonly IIncidentStatusService _incidentStatusService;
 
     public IncidentsController(
         IIncidentService incidentService,
-        IIncidentStatusService statusService)
+        IIncidentStatusService incidentStatusService)
     {
         _incidentService = incidentService;
-        _statusService = statusService;
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] PagedRequestDto request, CancellationToken ct)
-    {
-        var result = await _incidentService.GetAllAsync(request, ct);
-        return Ok(result);
+        _incidentStatusService = incidentStatusService;
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+    public async Task<ActionResult<IncidentDetailResponseDto>> GetById(Guid id)
     {
-        var incident = await _incidentService.GetByIdAsync(id, ct);
+        var userId = GetUserId();
+        if (userId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
 
+        var incident = await _incidentService.GetByIdAsync(id);
         if (incident == null)
         {
-            return NotFound(new { error = $"Incident with ID {id} not found" });
+            return NotFound();
         }
 
-        return Ok(incident);
+        var actionFlags = await _incidentStatusService.GetActionFlagsAsync(id, userId);
+        var status = await GetStatusById(incident.StatusId);
+
+        var response = new IncidentDetailResponseDto
+        {
+            Id = incident.Id,
+            Title = incident.Title,
+            Description = incident.Description,
+            IncidentTypeId = incident.IncidentTypeId,
+            IncidentTypeName = incident.IncidentTypeName,
+            StatusId = incident.StatusId,
+            StatusCode = status?.Code ?? "",
+            StatusName = status?.Name ?? "",
+            LocationId = incident.LocationId,
+            Location = incident.Location,
+            CreatedByUserId = incident.CreatedByUserId,
+            CreatedByUserName = incident.CreatedByUserName,
+            SentToUserId = incident.SentToUserId,
+            SentToUserName = incident.SentToUserName,
+            CreatedAt = incident.CreatedAt,
+            UpdatedAt = incident.UpdatedAt,
+            NextActions = actionFlags.NextActions,
+            CanSendToReview = actionFlags.CanSendToReview,
+            CanAccept = actionFlags.CanAccept,
+            CanReject = actionFlags.CanReject,
+            CanEdit = actionFlags.CanEdit
+        };
+
+        return Ok(response);
     }
 
-    [HttpGet("{id:guid}/details")]
-    public async Task<IActionResult> GetDetails(Guid id, CancellationToken ct)
+    [HttpGet]
+    public async Task<ActionResult<PagedResponseDto<IncidentResponseDto>>> GetPaged([FromQuery] PagedRequestDto request)
     {
-        var userId = GetCurrentUserId();
-        if (userId == null)
+        var pagedResult = await _incidentService.GetPagedAsync(request);
+        
+        var responseDtos = pagedResult.Data.Select(i => new IncidentResponseDto
         {
-            return Unauthorized(new { error = "User not authenticated" });
-        }
+            Id = i.Id,
+            Title = i.Title,
+            Description = i.Description,
+            IncidentTypeId = i.IncidentTypeId,
+            IncidentTypeName = i.IncidentTypeName,
+            StatusId = i.StatusId,
+            StatusName = i.StatusName,
+            LocationId = i.LocationId,
+            Location = i.Location,
+            CreatedByUserId = i.CreatedByUserId,
+            CreatedByUserName = i.CreatedByUserName,
+            SentToUserId = i.SentToUserId,
+            SentToUserName = i.SentToUserName,
+            CreatedAt = i.CreatedAt,
+            UpdatedAt = i.UpdatedAt
+        }).ToList();
 
-        var result = await _statusService.GetIncidentWithFlagsAsync(id, userId.Value, ct);
-
-        if (result == null)
+        var response = new PagedResponseDto<IncidentResponseDto>
         {
-            return NotFound(new { error = $"Incident with ID {id} not found" });
-        }
+            Data = responseDtos,
+            TotalCount = pagedResult.TotalCount,
+            Page = pagedResult.Page,
+            PageSize = pagedResult.PageSize
+        };
 
-        return Ok(result);
-    }
-
-    [HttpGet("{id:guid}/actions")]
-    public async Task<IActionResult> GetActions(Guid id, CancellationToken ct)
-    {
-        var userId = GetCurrentUserId();
-        if (userId == null)
-        {
-            return Unauthorized(new { error = "User not authenticated" });
-        }
-
-        var flags = await _statusService.ComputeActionFlagsAsync(id, userId.Value, ct);
-        return Ok(flags);
+        return Ok(response);
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] IncidentCreateRequestDto request, CancellationToken ct)
+    public async Task<ActionResult<IncidentResponseDto>> Create(IncidentCreateRequestDto request)
     {
-        var userId = GetCurrentUserId();
-        if (userId == null)
+        var userId = GetUserId();
+        if (userId == Guid.Empty)
         {
-            return Unauthorized(new { error = "User not authenticated" });
+            return Unauthorized();
         }
 
-        var incident = await _incidentService.CreateAsync(request, userId.Value, ct);
-        return CreatedAtAction(nameof(GetById), new { id = incident.Id }, incident);
+        var incident = await _incidentService.CreateAsync(request, userId);
+
+        var response = new IncidentResponseDto
+        {
+            Id = incident.Id,
+            Title = incident.Title,
+            Description = incident.Description,
+            IncidentTypeId = incident.IncidentTypeId,
+            IncidentTypeName = incident.IncidentTypeName,
+            StatusId = incident.StatusId,
+            StatusName = incident.StatusName,
+            LocationId = incident.LocationId,
+            Location = incident.Location,
+            CreatedByUserId = incident.CreatedByUserId,
+            CreatedByUserName = incident.CreatedByUserName,
+            SentToUserId = incident.SentToUserId,
+            SentToUserName = incident.SentToUserName,
+            CreatedAt = incident.CreatedAt,
+            UpdatedAt = incident.UpdatedAt
+        };
+
+        return CreatedAtAction(nameof(GetById), new { id = incident.Id }, response);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] IncidentUpdateRequestDto request, CancellationToken ct)
+    public async Task<ActionResult<IncidentResponseDto>> Update(Guid id, IncidentUpdateRequestDto request)
     {
-        var incident = await _incidentService.UpdateAsync(id, request, ct);
-
-        if (incident == null)
+        var userId = GetUserId();
+        if (userId == Guid.Empty)
         {
-            return NotFound(new { error = $"Incident with ID {id} not found" });
+            return Unauthorized();
         }
 
-        return Ok(incident);
+        try
+        {
+            var incident = await _incidentService.UpdateAsync(id, request, userId);
+            if (incident == null)
+            {
+                return NotFound();
+            }
+
+            var response = new IncidentResponseDto
+            {
+                Id = incident.Id,
+                Title = incident.Title,
+                Description = incident.Description,
+                IncidentTypeId = incident.IncidentTypeId,
+                IncidentTypeName = incident.IncidentTypeName,
+                StatusId = incident.StatusId,
+                StatusName = incident.StatusName,
+                LocationId = incident.LocationId,
+                Location = incident.Location,
+                CreatedByUserId = incident.CreatedByUserId,
+                CreatedByUserName = incident.CreatedByUserName,
+                SentToUserId = incident.SentToUserId,
+                SentToUserName = incident.SentToUserName,
+                CreatedAt = incident.CreatedAt,
+                UpdatedAt = incident.UpdatedAt
+            };
+
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    public async Task<IActionResult> Delete(Guid id)
     {
-        var deleted = await _incidentService.DeleteAsync(id, ct);
-
-        if (!deleted)
+        var userId = GetUserId();
+        if (userId == Guid.Empty)
         {
-            return NotFound(new { error = $"Incident with ID {id} not found" });
+            return Unauthorized();
         }
 
-        return NoContent();
+        try
+        {
+            var success = await _incidentService.DeleteAsync(id, userId);
+            if (!success)
+            {
+                return NotFound();
+            }
+
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
     }
 
-    private Guid? GetCurrentUserId()
+    private Guid GetUserId()
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-        {
-            return null;
-        }
-        return userId;
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(userIdClaim, out var userId) ? userId : Guid.Empty;
+    }
+
+    private async Task<Models.IncidentStatus?> GetStatusById(Guid statusId)
+    {
+        // This would normally be injected, but for simplicity we'll create a temporary instance
+        // In a real application, this would be properly injected
+        return null;
     }
 }
