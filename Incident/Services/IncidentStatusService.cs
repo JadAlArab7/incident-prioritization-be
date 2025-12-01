@@ -63,7 +63,7 @@ public class IncidentStatusService : IIncidentStatusService
         }
 
         // 4. Validate initiator
-        var validationResult = await ValidateInitiatorAsync(transition, incident, currentUserId, currentUser, ct);
+        var validationResult = ValidateInitiator(transition, incident, currentUserId, currentUser);
         if (!validationResult.Success)
         {
             return validationResult;
@@ -151,7 +151,7 @@ public class IncidentStatusService : IIncidentStatusService
             else if (transition.Initiator == INITIATOR_OFFICER)
             {
                 isAllowed = currentUserId == incident.SentToUserId && 
-                           currentUser.RoleCode?.ToLower() == ROLE_OFFICER;
+                           string.Equals(currentUser.RoleCode, ROLE_OFFICER, StringComparison.OrdinalIgnoreCase);
             }
 
             if (isAllowed)
@@ -223,12 +223,11 @@ public class IncidentStatusService : IIncidentStatusService
         };
     }
 
-    private async Task<StatusUpdateResult> ValidateInitiatorAsync(
+    private static StatusUpdateResult ValidateInitiator(
         IncidentStatusTransition transition,
         IncidentRecord incident,
         Guid currentUserId,
-        User currentUser,
-        CancellationToken ct)
+        User currentUser)
     {
         if (transition.Initiator == INITIATOR_CREATOR)
         {
@@ -244,7 +243,7 @@ public class IncidentStatusService : IIncidentStatusService
                 return StatusUpdateResult.Forbidden("Only the assigned officer can perform this action");
             }
 
-            if (currentUser.RoleCode?.ToLower() != ROLE_OFFICER)
+            if (!string.Equals(currentUser.RoleCode, ROLE_OFFICER, StringComparison.OrdinalIgnoreCase))
             {
                 return StatusUpdateResult.Forbidden("User must have officer role to perform this action");
             }
@@ -272,7 +271,7 @@ public class IncidentStatusService : IIncidentStatusService
             return StatusUpdateResult.BadRequest($"User with ID {targetUserId} not found");
         }
 
-        if (targetUser.RoleCode?.ToLower() != ROLE_OFFICER)
+        if (!string.Equals(targetUser.RoleCode, ROLE_OFFICER, StringComparison.OrdinalIgnoreCase))
         {
             return StatusUpdateResult.BadRequest($"User {targetUserId} must have officer role to be assigned");
         }
@@ -288,8 +287,7 @@ public class IncidentStatusService : IIncidentStatusService
         Guid? sentToUserId,
         CancellationToken ct)
     {
-        var connectionString = _dbHelper.GetConnectionString();
-        await using var connection = new NpgsqlConnection(connectionString);
+        await using var connection = new NpgsqlConnection(_dbHelper.ConnectionString);
         await connection.OpenAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
@@ -297,7 +295,7 @@ public class IncidentStatusService : IIncidentStatusService
         {
             // Lock and update incident
             const string updateSql = @"
-                UPDATE incidents 
+                UPDATE incident.incidents 
                 SET status_id = @statusId, 
                     sent_to_user_id = @sentToUserId,
                     updated_at = NOW()
@@ -311,7 +309,7 @@ public class IncidentStatusService : IIncidentStatusService
 
             // Insert history record
             const string historySql = @"
-                INSERT INTO incident_status_history (id, incident_id, from_status_id, to_status_id, changed_by_user_id, comment, changed_at)
+                INSERT INTO incident.incident_status_history (id, incident_id, from_status_id, to_status_id, changed_by_user_id, comment, changed_at)
                 VALUES (@id, @incidentId, @fromStatusId, @toStatusId, @changedByUserId, @comment, NOW())";
 
             await using var historyCmd = new NpgsqlCommand(historySql, connection, transaction);
