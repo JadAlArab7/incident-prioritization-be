@@ -196,14 +196,17 @@ public class IncidentRepository : IIncidentRepository
     }
 
     public async Task<(IEnumerable<IncidentRecord> Items, int TotalCount)> ListForUserAsync(
-        Guid userId, bool includeAssigned, int page, int pageSize, CancellationToken ct = default)
+        Guid userId, int page, int pageSize, CancellationToken ct = default)
     {
-        var whereClause = includeAssigned
-            ? "WHERE i.created_by_user_id = @userId OR i.sent_to_user_id = @userId"
-            : "WHERE i.created_by_user_id = @userId";
+        // Show incidents created by user OR assigned to user (but not in draft status)
+        var whereClause = @"WHERE (i.created_by_user_id = @userId) 
+                             OR (i.sent_to_user_id = @userId AND s.code != 'draft')";
 
         var countSql = $@"
-            SELECT COUNT(*) FROM incident.incidents i {whereClause}";
+            SELECT COUNT(*) 
+            FROM incident.incidents i 
+            JOIN incident.incident_statuses s ON i.status_id = s.id
+            {whereClause}";
 
         var totalCount = await _db.ExecuteScalarAsync<long>(countSql, ct, new NpgsqlParameter("@userId", userId));
 
@@ -368,5 +371,19 @@ public class IncidentRepository : IIncidentRepository
         }
 
         return incident;
+    }
+
+    public async Task<bool> UpdateStatusAsync(Guid incidentId, Guid statusId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE incident.incidents
+            SET status_id = @statusId
+            WHERE id = @incidentId";
+
+        var rows = await _db.ExecuteNonQueryAsync(sql, ct,
+            new NpgsqlParameter("@incidentId", incidentId),
+            new NpgsqlParameter("@statusId", statusId));
+
+        return rows > 0;
     }
 }

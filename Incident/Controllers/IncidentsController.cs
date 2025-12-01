@@ -65,14 +65,24 @@ public class IncidentsController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PagedResponseDto<IncidentResponseDto>>> List(
-        [FromQuery] bool includeAssigned = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
         var userId = GetCurrentUserId();
         var request = new PagedRequestDto { Page = page, PageSize = pageSize };
-        var result = await _incidentService.ListForUserAsync(userId, includeAssigned, request, ct);
+        var result = await _incidentService.ListForUserAsync(userId, request, ct);
+        return Ok(result);
+    }
+
+    [HttpPatch("{id:guid}/status")]
+    public async Task<ActionResult<IncidentResponseDto>> UpdateStatus(
+        Guid id,
+        [FromBody] UpdateStatusRequestDto request,
+        CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        var result = await _incidentService.UpdateStatusAsync(id, request.StatusId, userId, ct);
         return Ok(result);
     }
 

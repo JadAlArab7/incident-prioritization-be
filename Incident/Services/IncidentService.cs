@@ -9,15 +9,18 @@ public class IncidentService : IIncidentService
     private readonly IIncidentRepository _incidentRepository;
     private readonly ILookupRepository _lookupRepository;
     private readonly IUserRepository _userRepository;
+    private readonly ILlmService _llmService;
 
     public IncidentService(
         IIncidentRepository incidentRepository,
         ILookupRepository lookupRepository,
-        IUserRepository userRepository)
+        IUserRepository userRepository,
+        ILlmService llmService)
     {
         _incidentRepository = incidentRepository;
         _lookupRepository = lookupRepository;
         _userRepository = userRepository;
+        _llmService = llmService;
     }
 
     public async Task<IncidentResponseDto> CreateAsync(IncidentCreateRequestDto request, Guid currentUserId, CancellationToken ct = default)
@@ -165,10 +168,10 @@ public class IncidentService : IIncidentService
     }
 
     public async Task<PagedResponseDto<IncidentResponseDto>> ListForUserAsync(
-        Guid userId, bool includeAssigned, PagedRequestDto request, CancellationToken ct = default)
+        Guid userId, PagedRequestDto request, CancellationToken ct = default)
     {
         var (items, totalCount) = await _incidentRepository.ListForUserAsync(
-            userId, includeAssigned, request.Page, request.PageSize, ct);
+            userId, request.Page, request.PageSize, ct);
 
         return new PagedResponseDto<IncidentResponseDto>
         {
@@ -240,7 +243,81 @@ public class IncidentService : IIncidentService
                 Name = t.Name,
                 NameEn = t.NameEn,
                 NameAr = t.NameAr
-            }).ToList()
+            }).ToList(),
+            AvailableActions = MapWorkflowActions(incident.Status!.Code)
         };
+    }
+
+    private static IncidentWorkflowActionsDto MapWorkflowActions(string statusCode)
+    {
+        var actions = IncidentWorkflowEngine.GetAvailableActions(statusCode);
+        return new IncidentWorkflowActionsDto
+        {
+            CanSendToReview = actions.CanSendToReview,
+            CanSendToAccept = actions.CanSendToAccept,
+            CanSendToReject = actions.CanSendToReject
+        };
+    }
+
+    public async Task<IncidentResponseDto> UpdateStatusAsync(Guid id, Guid statusId, Guid currentUserId, CancellationToken ct = default)
+    {
+        var existing = await _incidentRepository.GetByIdAsync(id, ct);
+        if (existing == null)
+            throw new KeyNotFoundException("Incident not found");
+
+        // Validate status exists
+        var status = await _lookupRepository.GetStatusByIdAsync(statusId, ct);
+        if (status == null)
+            throw new ArgumentException("Invalid status ID");
+
+        var updated = await _incidentRepository.UpdateStatusAsync(id, statusId, ct);
+        if (!updated)
+            throw new InvalidOperationException("Failed to update incident status");
+
+        // Call LLM service when status changes to "accepted"
+        if (status.Code == IncidentStatus.Accepted)
+        {
+            await AnalyzeIncidentWithLlmAsync(id, existing.Description, ct);
+        }
+
+        return (await GetByIdAsync(id, ct))!;
+    }
+
+    private async Task AnalyzeIncidentWithLlmAsync(Guid incidentId, string? description, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return;
+
+        try
+        {
+            var analysisResult = await _llmService.AnalyzeIncidentAsync(description, ct);
+            if (analysisResult != null)
+            {
+                // Update the incident with LLM analysis results
+                var incident = await _incidentRepository.GetByIdAsync(incidentId, ct);
+                if (incident != null)
+                {
+                    var updatedIncident = new IncidentRecord
+                    {
+                        Id = incident.Id,
+                        Title = incident.Title,
+                        Description = incident.Description,
+                        SentToUserId = incident.SentToUserId,
+                        CreatedByUserId = incident.CreatedByUserId,
+                        LocationId = incident.LocationId,
+                        Priority = analysisResult.Severity,
+                        SuggestedActionsTaken = analysisResult.SuggestedActionsTaken,
+                        StatusId = incident.StatusId
+                    };
+
+                    await _incidentRepository.UpdateAsync(updatedIncident, incident.Types.Select(t => t.Id), ct);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Log error but don't fail the status update
+            // The incident status was already updated successfully
+        }
     }
 }

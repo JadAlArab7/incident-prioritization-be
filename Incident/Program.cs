@@ -8,6 +8,9 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add local configuration file (not tracked in git)
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -66,6 +69,12 @@ builder.Services.AddAuthorization();
 // Register Infrastructure
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 builder.Services.AddSingleton<IDbHelper>(new DbHelper(connectionString));
+
+// Configure OpenRouter settings
+builder.Services.Configure<OpenRouterSettings>(builder.Configuration.GetSection("OpenRouter"));
+
+// Register HttpClient for LLM service
+builder.Services.AddHttpClient<ILlmService, LlmService>();
 
 // Register Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();

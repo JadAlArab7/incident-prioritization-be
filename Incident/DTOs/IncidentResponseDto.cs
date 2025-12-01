@@ -14,6 +14,7 @@ public class IncidentResponseDto
     public List<IncidentTypeDto> Types { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public IncidentWorkflowActionsDto AvailableActions { get; set; } = null!;
 }
 
 public class UserSummaryDto
@@ -55,4 +56,11 @@ public class IncidentTypeDto
     public string Name { get; set; } = string.Empty;
     public string NameEn { get; set; } = string.Empty;
     public string NameAr { get; set; } = string.Empty;
+}
+
+public class IncidentWorkflowActionsDto
+{
+    public bool CanSendToReview { get; set; }
+    public bool CanSendToAccept { get; set; }
+    public bool CanSendToReject { get; set; }
 }
