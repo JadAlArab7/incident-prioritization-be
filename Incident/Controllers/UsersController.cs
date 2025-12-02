@@ -55,6 +55,17 @@ public class UsersController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
+    [HttpPut("{id:guid}")]
+    [Authorize(Roles = "supervisor,officer")]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateUserDto request, CancellationToken ct)
+    {
+        var updated = await _userService.UpdateAsync(id, request, ct);
+        if (!updated)
+            return NotFound();
+
+        return NoContent();
+    }
+
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "supervisor,officer")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)

@@ -56,8 +56,8 @@ public class LookupsController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("secretaries")]
-    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetSecretaries(CancellationToken ct)
+    [HttpGet("officers")]
+    public async Task<ActionResult<IEnumerable<UserSummaryDto>>> GetOfficers(CancellationToken ct)
     {
         var result = await _lookupService.ListSecretariesAsync(ct);
         return Ok(result);

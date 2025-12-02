@@ -19,7 +19,7 @@ public class LookupRepository : ILookupRepository
             SELECT u.id, u.username, u.role_id, r.name as role_name
             FROM incident.users u
             JOIN incident.roles r ON u.role_id = r.id
-            WHERE r.name = 'secretary'
+            WHERE r.name = 'officer'
             ORDER BY u.username";
 
         var users = new List<User>();
