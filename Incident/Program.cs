@@ -1,4 +1,5 @@
 using System.Text;
+using Incident.Hubs;
 using Incident.Infrastructure;
 using Incident.Repositories;
 using Incident.Services;
@@ -62,9 +63,29 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings.Audience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey))
     };
+    
+    // Configure SignalR authentication
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddAuthorization();
+
+// Add SignalR
+builder.Services.AddSignalR();
 
 // Register Infrastructure
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
@@ -73,20 +94,22 @@ builder.Services.AddSingleton<IDbHelper>(new DbHelper(connectionString));
 // Configure OpenRouter settings
 builder.Services.Configure<OpenRouterSettings>(builder.Configuration.GetSection("OpenRouter"));
 
-// Register HttpClient for LLM service
-builder.Services.AddHttpClient<ILlmService, LlmService>();
-
 // Register Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IIncidentRepository, IncidentRepository>();
 builder.Services.AddScoped<ILookupRepository, LookupRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 
 // Register Services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IIncidentService, IncidentService>();
 builder.Services.AddScoped<ILookupService, LookupService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+
+// Register LLM Service with HttpClient
+builder.Services.AddHttpClient<ILlmService, LlmService>();
 
 // Register DbSeederService
 builder.Services.AddScoped<DbSeederService>();
@@ -96,9 +119,10 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://localhost:4200") // Add your frontend URLs
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials(); // Required for SignalR
     });
 });
 
@@ -123,5 +147,6 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();

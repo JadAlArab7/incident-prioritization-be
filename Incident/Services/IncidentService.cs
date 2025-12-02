@@ -10,17 +10,20 @@ public class IncidentService : IIncidentService
     private readonly ILookupRepository _lookupRepository;
     private readonly IUserRepository _userRepository;
     private readonly ILlmService _llmService;
+    private readonly INotificationService _notificationService;
 
     public IncidentService(
         IIncidentRepository incidentRepository,
         ILookupRepository lookupRepository,
         IUserRepository userRepository,
-        ILlmService llmService)
+        ILlmService llmService,
+        INotificationService notificationService)
     {
         _incidentRepository = incidentRepository;
         _lookupRepository = lookupRepository;
         _userRepository = userRepository;
         _llmService = llmService;
+        _notificationService = notificationService;
     }
 
     public async Task<IncidentResponseDto> CreateAsync(IncidentCreateRequestDto request, Guid currentUserId, CancellationToken ct = default)
@@ -273,6 +276,25 @@ public class IncidentService : IIncidentService
         var updated = await _incidentRepository.UpdateStatusAsync(id, statusId, ct);
         if (!updated)
             throw new InvalidOperationException("Failed to update incident status");
+
+        // Send notification to incident creator about status change
+        try
+        {
+            await _notificationService.CreateAndSendNotificationAsync(new CreateNotificationDto
+            {
+                UserId = existing.CreatedByUserId,
+                NotificationTypeCode = NotificationType.IncidentStatusChanged,
+                Title = "Incident Status Updated",
+                Message = $"Your incident '{existing.Title}' status has been changed to {status.Name}",
+                RelatedEntityType = "incident",
+                RelatedEntityId = id
+            }, ct);
+        }
+        catch (Exception)
+        {
+            // Log but don't fail the status update
+            // Notification failure should not affect the main operation
+        }
 
         // Call LLM service when status changes to "accepted"
         if (status.Code == IncidentStatus.Accepted)
