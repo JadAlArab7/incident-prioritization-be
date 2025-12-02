@@ -119,7 +119,11 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173", "http://localhost:4200") // Add your frontend URLs
+        policy.WithOrigins(
+                "http://localhost:3000", 
+                "http://localhost:5173", 
+                "http://localhost:4200",
+                "https://localhost:4200") // Add your frontend URLs
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials(); // Required for SignalR
