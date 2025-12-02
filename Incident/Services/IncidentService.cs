@@ -52,6 +52,28 @@ public class IncidentService : IIncidentService
             locationId = await _incidentRepository.CreateLocationAsync(location, ct);
         }
 
+        // Analyze incident with LLM if description is provided
+        string? analyzedPriority = request.Priority;
+        string? analyzedActions = request.SuggestedActionsTaken;
+        
+        if (!string.IsNullOrWhiteSpace(request.Description))
+        {
+            try
+            {
+                var analysisResult = await _llmService.AnalyzeIncidentAsync(request.Description, ct);
+                if (analysisResult != null)
+                {
+                    analyzedPriority = analysisResult.Severity;
+                    analyzedActions = analysisResult.SuggestedActionsTaken;
+                }
+            }
+            catch (Exception)
+            {
+                // If LLM analysis fails, continue with original values
+                // The incident creation should not fail due to LLM issues
+            }
+        }
+
         // Default status is 'draft'
         var incident = new IncidentRecord
         {
@@ -60,8 +82,8 @@ public class IncidentService : IIncidentService
             SentToUserId = request.SentToUserId,
             CreatedByUserId = currentUserId,
             LocationId = locationId,
-            Priority = request.Priority,
-            SuggestedActionsTaken = request.SuggestedActionsTaken,
+            Priority = analyzedPriority,
+            SuggestedActionsTaken = analyzedActions,
             StatusId = IncidentStatus.DraftId
         };
 

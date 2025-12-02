@@ -42,6 +42,9 @@ Incident Description: Armed raid occurred at downtown bank.
   ""severity"": ""High"",
   ""suggestedActionsTaken"": ""Notify law enforcement immediately, secure the area, evacuate civilians, and initiate emergency response protocols.""
 }
+Note: just analyse the incident and return the JSON object as shown above.
+DO not return anything else.
+I need no reasoning or explanation, just the JSON object.
 
 Now analyze the following incident description:
 ";
@@ -68,15 +71,18 @@ Now analyze the following incident description:
 
             var response = await _httpClient.PostAsync(_settings.ApiUrl, httpContent, ct);
             
-            if (!response.IsSuccessStatusCode)
+             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync(ct);
                 _logger.LogError("OpenRouter API error: {StatusCode} - {Error}", response.StatusCode, errorContent);
                 return null;
             }
 
-            var responseContent = await response.Content.ReadAsStringAsync(ct);
-            var openRouterResponse = JsonSerializer.Deserialize<OpenRouterResponse>(responseContent);
+            var responseContent = (await response.Content.ReadAsStringAsync(ct)).Trim();
+            var openRouterResponse = JsonSerializer.Deserialize<OpenRouterResponse>(responseContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
 
             if (openRouterResponse?.Choices == null || openRouterResponse.Choices.Length == 0)
             {
@@ -85,6 +91,13 @@ Now analyze the following incident description:
             }
 
             var messageContent = openRouterResponse.Choices[0].Message?.Content;
+            
+            // Some models (like DeepSeek reasoning models) put content in 'reasoning' field
+            if (string.IsNullOrEmpty(messageContent))
+            {
+                messageContent = openRouterResponse.Choices[0].Message?.Reasoning;
+            }
+            
             if (string.IsNullOrEmpty(messageContent))
             {
                 _logger.LogWarning("Empty message content from OpenRouter API");
@@ -151,10 +164,15 @@ Now analyze the following incident description:
     private class Choice
     {
         public Message? Message { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("finish_reason")]
+        public string? FinishReason { get; set; }
     }
 
     private class Message
     {
         public string? Content { get; set; }
+        public string? Role { get; set; }
+        public string? Reasoning { get; set; }
     }
 }
